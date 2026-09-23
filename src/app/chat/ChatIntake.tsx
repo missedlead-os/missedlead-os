@@ -5,38 +5,77 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
-import { BoltIcon, CameraIcon, DrainIcon, DropletIcon, FanIcon, HelpIcon, ThermometerIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
+import { ApplianceIcon, CameraIcon, ClipboardIcon, EmptyBoxIcon, HouseIcon, PlusIcon, StarIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
 
 import { categoryIcon, categoryLabel, issueIcon } from "../issueIcon";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
-type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean; quoted?: string; note?: boolean };
+type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean; quoted?: string; note?: boolean; hidden?: boolean };
 type Translation = { original: string; translated: string; sourceLocale: IntakeLocale; targetLocale: IntakeLocale; warning: string; translationToken: string };
 type PendingMediaRequest = { requestId: string; assessmentToken: string };
-type SymptomId = "leak" | "drain" | "ac" | "hotwater" | "power" | "other";
+type ServiceId = "repair" | "cleaning" | "removal" | "outdoor" | "install" | "bundle";
 
-const symptomIcons: Record<SymptomId, IconComponent> = { leak: DropletIcon, drain: DrainIcon, ac: FanIcon, hotwater: ThermometerIcon, power: BoltIcon, other: HelpIcon };
+const serviceIcons: Record<ServiceId, IconComponent> = { repair: WrenchIcon, cleaning: StarIcon, removal: EmptyBoxIcon, outdoor: HouseIcon, install: ApplianceIcon, bundle: ClipboardIcon };
+const charlotteStreets = [
+  "Central Ave, Charlotte, NC 28204", "Commonwealth Ave, Charlotte, NC 28205", "The Plaza, Charlotte, NC 28205", "South Blvd, Charlotte, NC 28203", "East Blvd, Charlotte, NC 28203", "Park Rd, Charlotte, NC 28209", "Providence Rd, Charlotte, NC 28211", "Monroe Rd, Charlotte, NC 28205", "Sharon Rd, Charlotte, NC 28210", "Tryon St, Charlotte, NC 28202",
+];
+const cleaningAddOns = [
+  { id: "carpet", en: "Carpet shampoo", es: "Lavado de alfombra", unitEn: "room", unitEs: "habitación", low: 30, high: 70, quantity: true },
+  { id: "sofa", en: "Sofa shampoo", es: "Lavado de sofá", unitEn: "sofa", unitEs: "sofá", low: 150, high: 220, quantity: true },
+  { id: "garage", en: "Garage cleaning", es: "Limpieza de garaje", unitEn: "garage", unitEs: "garaje", low: 50, high: 75, quantity: false },
+  { id: "filter", en: "AC filter cleaning / replacement labor", es: "Limpieza o cambio de filtro de aire", unitEn: "filter", unitEs: "filtro", low: 35, high: 60, quantity: true },
+  { id: "fridge", en: "Inside refrigerator", es: "Interior del refrigerador", unitEn: "item", unitEs: "unidad", low: 35, high: 50, quantity: false },
+  { id: "oven", en: "Inside oven", es: "Interior del horno", unitEn: "item", unitEs: "unidad", low: 35, high: 50, quantity: false },
+  { id: "windows", en: "Interior windows", es: "Ventanas interiores", unitEn: "set", unitEs: "grupo", low: 45, high: 80, quantity: false },
+  { id: "pet-hair", en: "Pet-hair deep treatment", es: "Tratamiento intensivo de pelo de mascota", unitEn: "service", unitEs: "servicio", low: 30, high: 40, quantity: false },
+] as const;
 const fileAccept = "image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime,audio/mpeg,audio/webm,audio/mp4,audio/wav,audio/x-wav";
 type StoredIntake = { messages: DisplayMessage[]; draft: string; assessment: IntakeAssessment | null; selectedIssueIds: string[]; skipQuestionIds: string[]; skipAcknowledged: boolean; uncertaintyAcknowledged: boolean; translations: Record<number, Translation>; translationsDirty: boolean; hadMedia: boolean; pendingMediaRequest: PendingMediaRequest | null };
-const demoAssessment = (locale: IntakeLocale, content: string): IntakeAssessment => ({
-  reply: locale === "es"
-    ? "Veo una posible fuga o problema de drenaje. Para una orientación más precisa, comparta una foto del área y del agua."
-    : "This sounds like a possible leak or drain issue. For a clearer first read, share a photo of the area and the water.",
-  locale,
-  issueCandidates: [{
-    id: "demo-drain-leak",
-    label: locale === "es" ? "Fuga o drenaje bajo el fregadero" : "Leak or drain issue under the sink",
-    likelihood: "medium",
-    reason: content || (locale === "es" ? "El síntoma coincide con problemas comunes de plomería." : "The symptom matches a common plumbing issue."),
-    evidenceNeeded: [locale === "es" ? "Foto de las conexiones" : "Photo of the connections"],
-  }],
-  questions: [],
-  safety: { level: "normal", guidance: "" },
-  readyToConfirm: false,
-  category: "plumbing",
-  materialsHint: [locale === "es" ? "Linterna y toallas" : "Flashlight and towels"],
-  assessmentToken: "demo-assessment",
-});
+const demoQuestions: Record<ServiceId, Record<IntakeLocale, string[]>> = {
+  cleaning: {
+    en: ["What type of cleaning do you need: regular, deep, or move-in/move-out?", "Which rooms or areas should be cleaned?", "About how large is the home, or how many bedrooms and bathrooms does it have?", "What date or time window works best?", "Are there any stains, buildup, pets, or special areas we should know about?"],
+    es: ["¿Qué tipo de limpieza necesita: regular, profunda o de mudanza?", "¿Qué habitaciones o áreas se deben limpiar?", "¿Qué tamaño tiene la casa o cuántos dormitorios y baños tiene?", "¿Qué fecha u horario le conviene?", "¿Hay manchas, acumulación, mascotas o áreas especiales que debamos conocer?"],
+  },
+  repair: { en: ["What needs to be repaired, and where in the home is it?", "When did the problem start?", "Is there any water, smoke, gas smell, exposed wiring, or other immediate safety concern?"], es: ["¿Qué necesita reparar y en qué parte de la casa está?", "¿Cuándo comenzó el problema?", "¿Hay agua, humo, olor a gas, cableado expuesto u otro riesgo inmediato?"] },
+  removal: { en: ["What needs to be removed?", "Approximately how large or heavy is it?", "How can the crew access it, and are there stairs, gates, or utility lines nearby?"], es: ["¿Qué necesita retirar?", "¿Qué tamaño o peso aproximado tiene?", "¿Cómo puede acceder el equipo y hay escaleras, portones o servicios públicos cerca?"] },
+  outdoor: { en: ["What outdoor work do you need, and where on the property is it?", "About how large is the area?", "Is there anything that could affect access or safety?"], es: ["¿Qué trabajo exterior necesita y en qué parte de la propiedad?", "¿Qué tamaño aproximado tiene el área?", "¿Hay algo que pueda afectar el acceso o la seguridad?"] },
+  install: { en: ["What needs to be installed or assembled, and where will it go?", "Do you already have the item and all included parts?", "Will it need wall mounting, plumbing, electrical, or another utility connection?"], es: ["¿Qué necesita instalar o armar y dónde irá?", "¿Ya tiene el artículo y todas sus piezas?", "¿Necesita montaje en pared, plomería, electricidad u otra conexión?"] },
+  bundle: { en: ["Is there another small job you want to include in this visit?", "Which rooms are these jobs in?", "Do any tasks involve plumbing, electrical work, or heavy mounting?"], es: ["¿Hay otro trabajo pequeño que quiera incluir en esta visita?", "¿En qué habitaciones están estos trabajos?", "¿Alguna tarea incluye plomería, electricidad o montaje pesado?"] },
+};
+
+const demoAssessment = (locale: IntakeLocale, content: string, history: DisplayMessage[], previous: IntakeAssessment | null): IntakeAssessment => {
+  const context = history.map((message) => message.content).join("\n").toLowerCase();
+  const service: ServiceId = /bundle|small jobs|agrupar|trabajos pequeños/.test(context) ? "bundle"
+    : /clean|limpieza/.test(context) ? "cleaning"
+      : /remov|retir/.test(context) ? "removal"
+        : /outdoor|exterior|jardín|yard|fence/.test(context) ? "outdoor"
+          : /install|assemble|instalar|armar/.test(context) ? "install" : "repair";
+  const questions = demoQuestions[service][locale];
+  const priorMatch = previous?.questions[0]?.id.match(/-(\d+)-of-/);
+  const questionIndex = priorMatch ? Number(priorMatch[1]) : 0;
+  const nextQuestion = questions[questionIndex];
+  const labelByService: Record<ServiceId, Record<IntakeLocale, string>> = {
+    cleaning: { en: "Deep cleaning service", es: "Servicio de limpieza profunda" }, repair: { en: "Home repair service", es: "Servicio de reparación" }, removal: { en: "Removal service", es: "Servicio de retiro" }, outdoor: { en: "Outdoor service", es: "Servicio exterior" }, install: { en: "Installation and assembly", es: "Instalación y montaje" }, bundle: { en: "Bundled small-job list", es: "Lista agrupada de trabajos pequeños" },
+  };
+  const categoryByService: Record<ServiceId, string> = { cleaning: "cleaning", repair: "handyman", removal: "removal", outdoor: "outdoor", install: "installation", bundle: "bundle" };
+  return {
+    reply: nextQuestion ?? (locale === "es" ? "Perfecto. Revise los detalles y confirme su solicitud." : "Great. Review the details and confirm your request."),
+    locale,
+    issueCandidates: [{
+      id: `demo-${service}`,
+      label: labelByService[service][locale],
+      likelihood: "medium",
+      reason: content || (locale === "es" ? "Solicitud de servicio proporcionada por el cliente." : "Customer-provided service request."),
+      evidenceNeeded: [locale === "es" ? "Una foto de cada área o elemento" : "A photo of each area or item"],
+    }],
+    questions: nextQuestion ? [{ id: `${service}-${questionIndex + 1}-of-${questions.length}`, prompt: nextQuestion, requiredForSafety: false }] : [],
+    safety: { level: "normal", guidance: "" },
+    readyToConfirm: !nextQuestion,
+    category: categoryByService[service],
+    materialsHint: service === "cleaning" ? [locale === "es" ? "Productos y equipo según las áreas confirmadas" : "Supplies and equipment based on the confirmed areas"] : [locale === "es" ? "Herramientas según la lista confirmada" : "Tools based on the confirmed task list"],
+    assessmentToken: `demo-${service}-assessment`,
+  };
+};
 
 type ChatIntakeProps = {
   accessToken: string;
@@ -86,7 +125,14 @@ type Copy = {
   heroSub: string;
   photoCta: string;
   tilesLabel: string;
-  tiles: { id: SymptomId; label: string; message: string }[];
+  tiles: { id: ServiceId; label: string; description: string; message: string }[];
+  bundleTitle: string;
+  bundleHelp: string;
+  bundleTasks: string[];
+  bundleCustom: string;
+  bundleStart: string;
+  bundleBack: string;
+  restart: string;
   questionStep: string;
   steps: [string, string, string];
   moreIssues: string;
@@ -101,11 +147,11 @@ type Copy = {
 
 const copy: Record<IntakeLocale, Copy> = {
   en: {
-    title: "Tell us what happened",
-    subtitle: "We’ll ask a few useful questions, then prepare a repair request for local pros.",
-    greeting: "Hi, I’m the WeCover repair assistant. What’s happening in your home? Share what you see, hear, or smell. You can add photos, a short video, or a voice note too.",
-    placeholder: "What happened?",
-    composerLabel: "Describe the problem or answer the question",
+    title: "What do you need help with?",
+    subtitle: "Repair, clean, remove, install, or bundle small jobs into one visit.",
+    greeting: "Hi, I’m the WeCover home service assistant. Choose a service below or describe what you need. You can add photos, a short video, or a voice note too.",
+    placeholder: "Describe the service you need",
+    composerLabel: "Describe the service or answer the question",
     attach: "Add photos, video, or audio",
     send: "Send",
     skip: "I’m not sure — skip",
@@ -119,36 +165,43 @@ const copy: Record<IntakeLocale, Copy> = {
     materialsNote: "A rough guess so the technician arrives prepared — confirmed on site.",
     evidence: "Helpful next photo or detail",
     safetyRequired: "This answer is needed for safety and can’t be skipped.",
-    confirmTitle: "Review your repair request",
-    confirmHelp: "Choose the possible issues that best match what you’re seeing. You can edit your name and service address before we look for technicians.",
+    confirmTitle: "Review your service request",
+    confirmHelp: "Choose the items that best match what you need. You can edit your name and service address before we look for local pros.",
     name: "Your name",
     address: "Service address",
-    accessNotes: "Entry instructions for the technician (optional — gate code, lockbox, call first)",
+    accessNotes: "Entry instructions for the service pro (optional — gate code, lockbox, call first)",
     pets: "Pets at home? (optional — dog, cat, none)",
     uncertainty: "I understand this is a provisional scope, not a confirmed diagnosis, and the final quote may change after inspection.",
-    confirm: "Confirm and find technicians",
-    confirming: "Looking for technicians…",
+    confirm: "Confirm and find local pros",
+    confirming: "Looking for local pros…",
     payment: "No payment is collected during this consultation.",
     fileLimits: "Up to 10 photos, videos, or audio files. 25 MB each, 50 MB total.",
-    mediaConsent: "I agree to secure AI processing of these files for this repair request.",
+    mediaConsent: "I agree to secure AI processing of these files for this service request.",
     mediaPrivacy: "Before sending, remove faces, mail, IDs, or other private details that are not needed to show the problem.",
     translate: "Show Spanish translation",
     translating: "Translating…",
     saveTranslation: "Save translation and continue",
     reattach: "For your privacy, attached files were not saved in this browser. Add them again before continuing.",
     remove: "Remove",
-    heroTitle: "Snap a photo — we’ll take it from there.",
-    heroSub: "AI-assisted intake plus licensed, insured local pros — serving Charlotte.",
+    heroTitle: "One place for the work around your home.",
+    heroSub: "Tell us what you need, add photos if helpful, and we’ll prepare the right service request.",
     photoCta: "Take or upload a photo",
-    tilesLabel: "Sound familiar? Tap one",
+    tilesLabel: "Choose a service",
     tiles: [
-      { id: "leak", label: "Water leak", message: "I found water leaking or pooling where it shouldn’t be." },
-      { id: "drain", label: "Clogged drain", message: "Water drains slowly or won’t drain at all." },
-      { id: "ac", label: "AC not cooling", message: "The AC is running but the house isn’t cooling down." },
-      { id: "hotwater", label: "No hot water", message: "No hot water — the water heater may be acting up." },
-      { id: "power", label: "No power", message: "An outlet or breaker stopped working." },
-      { id: "other", label: "Something else", message: "I have a different home repair issue." },
+      { id: "repair", label: "Repair", description: "Plumbing, HVAC, electrical, and fixes", message: "I need a home repair. Please ask what is wrong, where it is, and any safety questions needed." },
+      { id: "cleaning", label: "Cleaning", description: "Deep, move-out, and home cleaning", message: "I need a cleaning service. Please ask what areas need cleaning, the type of cleaning, and the approximate size." },
+      { id: "removal", label: "Removal", description: "Trees, decks, junk, and old structures", message: "I need something removed from my property. Please ask what it is, its size, access conditions, and whether permits or a specialist may be needed." },
+      { id: "outdoor", label: "Outdoor work", description: "Yard, fence, exterior, and seasonal jobs", message: "I need outdoor work. Please ask what area is involved, the work needed, and any access or safety concerns." },
+      { id: "install", label: "Install & assemble", description: "Fixtures, furniture, appliances, and shelves", message: "I need an item installed or assembled. Please ask what the item is, where it goes, and whether mounting, utilities, or special tools are involved." },
+      { id: "bundle", label: "Bundle small jobs", description: "Complete a home to-do list in one visit", message: "" },
     ],
+    bundleTitle: "Build your Home To-Do Bundle",
+    bundleHelp: "Select every small task you want handled in one visit. We’ll check whether one pro can safely complete the list or whether a licensed trade is needed.",
+    bundleTasks: ["Adjust a door or lock", "Replace cabinet hardware", "Patch a small wall hole", "Caulk a sink, tub, or trim", "Install a shelf or blinds", "Assemble furniture"],
+    bundleCustom: "Add another small task",
+    bundleStart: "Start bundled request",
+    bundleBack: "Back to services",
+    restart: "Choose a different service",
     questionStep: "Question {current} of {total}",
     steps: ["Describe", "A few questions", "Review & confirm"],
     moreIssues: "Show more possibilities",
@@ -161,11 +214,11 @@ const copy: Record<IntakeLocale, Copy> = {
     likelihood: { high: "high", medium: "medium", low: "low" },
   },
   es: {
-    title: "Cuéntenos qué pasó",
-    subtitle: "Le haremos algunas preguntas y prepararemos una solicitud para profesionales locales.",
-    greeting: "Hola, soy el asistente de reparaciones de WeCover. ¿Qué está pasando en su hogar? Cuéntenos qué ve, oye o huele. También puede adjuntar fotos, un video corto o una nota de voz.",
-    placeholder: "¿Qué pasó?",
-    composerLabel: "Describa el problema o responda la pregunta",
+    title: "¿Con qué necesita ayuda?",
+    subtitle: "Repare, limpie, retire, instale o agrupe trabajos pequeños en una sola visita.",
+    greeting: "Hola, soy el asistente de servicios para el hogar de WeCover. Elija un servicio o describa lo que necesita. También puede adjuntar fotos, un video corto o una nota de voz.",
+    placeholder: "Describa el servicio que necesita",
+    composerLabel: "Describa el servicio o responda la pregunta",
     attach: "Agregar fotos, video o audio",
     send: "Enviar",
     skip: "No estoy seguro — omitir",
@@ -179,36 +232,43 @@ const copy: Record<IntakeLocale, Copy> = {
     materialsNote: "Una estimación para que el técnico llegue preparado — se confirma en el lugar.",
     evidence: "Próxima foto o dato útil",
     safetyRequired: "Esta respuesta es necesaria por seguridad y no se puede omitir.",
-    confirmTitle: "Revise su solicitud",
-    confirmHelp: "Elija los posibles problemas que coincidan con lo que ve. Puede editar su nombre y dirección antes de buscar técnicos.",
+    confirmTitle: "Revise su solicitud de servicio",
+    confirmHelp: "Elija los elementos que coincidan con lo que necesita. Puede editar su nombre y dirección antes de buscar profesionales locales.",
     name: "Su nombre",
     address: "Dirección del servicio",
-    accessNotes: "Instrucciones de acceso para el técnico (opcional — código de portón, caja de llaves, llame primero)",
+    accessNotes: "Instrucciones de acceso para el profesional (opcional — código de portón, caja de llaves, llame primero)",
     pets: "¿Mascotas en casa? (opcional — perro, gato, ninguna)",
     uncertainty: "Entiendo que este alcance es provisional, no un diagnóstico confirmado, y que el presupuesto final puede cambiar después de la inspección.",
-    confirm: "Confirmar y buscar técnicos",
-    confirming: "Buscando técnicos…",
+    confirm: "Confirmar y buscar profesionales",
+    confirming: "Buscando profesionales…",
     payment: "No se cobra durante esta consulta.",
     fileLimits: "Hasta 10 fotos, videos o archivos de audio. 25 MB cada uno, 50 MB en total.",
-    mediaConsent: "Acepto el procesamiento seguro con IA de estos archivos para esta solicitud de reparación.",
+    mediaConsent: "Acepto el procesamiento seguro con IA de estos archivos para esta solicitud de servicio.",
     mediaPrivacy: "Antes de enviar, quite rostros, correspondencia, identificaciones u otros datos privados que no sean necesarios para mostrar el problema.",
     translate: "Mostrar traducción al inglés",
     translating: "Traduciendo…",
     saveTranslation: "Guardar traducción y continuar",
     reattach: "Por su privacidad, los archivos adjuntos no se guardaron en este navegador. Agréguelos de nuevo antes de continuar.",
     remove: "Eliminar",
-    heroTitle: "Tome una foto — nosotros nos encargamos.",
-    heroSub: "Diagnóstico asistido por IA y técnicos locales con licencia y seguro — en Charlotte.",
+    heroTitle: "Un solo lugar para los trabajos de su hogar.",
+    heroSub: "Cuéntenos qué necesita, añada fotos si ayudan y prepararemos la solicitud adecuada.",
     photoCta: "Tome o suba una foto",
-    tilesLabel: "¿Le suena? Toque uno",
+    tilesLabel: "Elija un servicio",
     tiles: [
-      { id: "leak", label: "Fuga de agua", message: "Encontré una fuga o agua donde no debería estar." },
-      { id: "drain", label: "Drenaje tapado", message: "El agua drena lento o no drena." },
-      { id: "ac", label: "El aire no enfría", message: "El aire acondicionado funciona pero no enfría la casa." },
-      { id: "hotwater", label: "Sin agua caliente", message: "No hay agua caliente — puede ser el calentador." },
-      { id: "power", label: "Sin electricidad", message: "Un enchufe o breaker dejó de funcionar." },
-      { id: "other", label: "Otro problema", message: "Tengo otro problema de reparación en casa." },
+      { id: "repair", label: "Reparación", description: "Plomería, climatización, electricidad y arreglos", message: "Necesito una reparación en casa. Pregúnteme qué falla, dónde está y las preguntas de seguridad necesarias." },
+      { id: "cleaning", label: "Limpieza", description: "Limpieza profunda, de mudanza y del hogar", message: "Necesito un servicio de limpieza. Pregúnteme qué áreas, el tipo de limpieza y el tamaño aproximado." },
+      { id: "removal", label: "Retiro", description: "Árboles, terrazas, basura y estructuras viejas", message: "Necesito retirar algo de mi propiedad. Pregúnteme qué es, su tamaño, el acceso y si se necesita permiso o especialista." },
+      { id: "outdoor", label: "Trabajo exterior", description: "Jardín, cerca, exterior y trabajos de temporada", message: "Necesito trabajo exterior. Pregúnteme el área, el trabajo y cualquier problema de acceso o seguridad." },
+      { id: "install", label: "Instalar y armar", description: "Accesorios, muebles, electrodomésticos y estantes", message: "Necesito instalar o armar algo. Pregúnteme qué es, dónde va y si requiere montaje, conexiones o herramientas especiales." },
+      { id: "bundle", label: "Agrupar trabajos", description: "Complete su lista del hogar en una visita", message: "" },
     ],
+    bundleTitle: "Cree su paquete de tareas del hogar",
+    bundleHelp: "Seleccione todos los trabajos pequeños para una visita. Verificaremos si un profesional puede hacerlos de forma segura o si necesita un oficio con licencia.",
+    bundleTasks: ["Ajustar una puerta o cerradura", "Cambiar herrajes de gabinetes", "Reparar un agujero pequeño", "Sellar fregadero, bañera o moldura", "Instalar estante o persianas", "Armar muebles"],
+    bundleCustom: "Añadir otro trabajo pequeño",
+    bundleStart: "Iniciar solicitud agrupada",
+    bundleBack: "Volver a servicios",
+    restart: "Elegir otro servicio",
     questionStep: "Pregunta {current} de {total}",
     steps: ["Describir", "Algunas preguntas", "Revisar y confirmar"],
     moreIssues: "Ver más posibilidades",
@@ -293,12 +353,35 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
   const [requiresReattach, setRequiresReattach] = useState(initialState.hadMedia);
   const [showAllIssues, setShowAllIssues] = useState(false);
   const [pendingMediaRequest, setPendingMediaRequest] = useState<PendingMediaRequest | null>(initialState.pendingMediaRequest);
+  const [bundleOpen, setBundleOpen] = useState(false);
+  const [bundleTasks, setBundleTasks] = useState<string[]>([]);
+  const [bundleCustom, setBundleCustom] = useState("");
+  const [serviceAddress, setServiceAddress] = useState("");
+  const [selectedCleaningAddOns, setSelectedCleaningAddOns] = useState<Record<string, number | "">>({});
   const logRef = useRef<HTMLDivElement>(null);
   const storageKey = intakeStorageKey(accessToken, locale);
   const openQuestions = assessment?.questions.filter((question) => !skipQuestionIds.includes(question.id)) ?? [];
   const activeQuestion = assessment && !assessment.readyToConfirm ? openQuestions[0] : undefined;
+  const showDiagnosticAssessment = Boolean(assessment && !["cleaning", "removal", "outdoor", "installation", "bundle"].includes(assessment.category ?? ""));
+  const showComposer = messages.length > 0 || Boolean(assessment) || files.length > 0;
+  const cleaningEstimate = useMemo(() => cleaningAddOns.reduce((total, addOn) => {
+    const quantity = Number(selectedCleaningAddOns[addOn.id]) || 0;
+    return { low: total.low + addOn.low * quantity, high: total.high + addOn.high * quantity };
+  }, { low: 230, high: 420 }), [selectedCleaningAddOns]);
+  const cleaningAnswers = useMemo(() => messages.filter((message) => message.role === "user" && !message.hidden).map((message) => ({ question: message.quoted, answer: message.content })), [messages]);
+  const addressSuggestions = useMemo(() => {
+    const match = serviceAddress.trim().match(/^(\d+)\s*(.*)$/);
+    if (!match || !match[2]) return [];
+    if (charlotteStreets.some((street) => serviceAddress.trim() === `${match[1]} ${street}`)) return [];
+    const streetQuery = match[2].toLowerCase();
+    return charlotteStreets.filter((street) => street.toLowerCase().startsWith(streetQuery)).slice(0, 5).map((street) => `${match[1]} ${street}`);
+  }, [serviceAddress]);
 
   useEffect(() => {
+    if (!messages.length && !assessment && !error) {
+      if (logRef.current) logRef.current.scrollTop = 0;
+      return;
+    }
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, assessment, error]);
 
@@ -314,7 +397,13 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     const state = readStoredIntake(accessToken, next);
     setLocale(next);
     onLocaleChange?.(next);
-    setMessages(state.messages); setDraft(state.draft); setAssessment(state.assessment); setSelectedIssueIds(state.selectedIssueIds); setSkipQuestionIds(state.skipQuestionIds); setSkipAcknowledged(state.skipAcknowledged); setUncertaintyAcknowledged(state.uncertaintyAcknowledged); setTranslations(state.translations); setTranslationsDirty(state.translationsDirty); setRequiresReattach(state.hadMedia); setPendingMediaRequest(state.pendingMediaRequest); setFiles([]); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null); setShowAllIssues(false);
+    setMessages(state.messages); setDraft(state.draft); setAssessment(state.assessment); setSelectedIssueIds(state.selectedIssueIds); setSkipQuestionIds(state.skipQuestionIds); setSkipAcknowledged(state.skipAcknowledged); setUncertaintyAcknowledged(state.uncertaintyAcknowledged); setTranslations(state.translations); setTranslationsDirty(state.translationsDirty); setRequiresReattach(state.hadMedia); setPendingMediaRequest(state.pendingMediaRequest); setFiles([]); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null); setShowAllIssues(false); setBundleOpen(false); setBundleTasks([]); setBundleCustom("");
+  };
+
+  const restartIntake = () => {
+    try { sessionStorage.removeItem(storageKey); } catch { /* State reset below still returns the user to service selection. */ }
+    setMessages([]); setDraft(""); setFiles([]); setAssessment(null); setSelectedIssueIds([]); setSkipQuestionIds([]); setSkipAcknowledged(false); setUncertaintyAcknowledged(false); setTranslations({}); setTranslationsDirty(false); setRequiresReattach(false); setPendingMediaRequest(null); setMediaConsent(false); setError(""); setFileError(""); setLastAttempt(null); setConfirmationRetry(null); setShowAllIssues(false); setBundleOpen(false); setBundleTasks([]); setBundleCustom(""); setServiceAddress(""); setSelectedCleaningAddOns({});
+    requestAnimationFrame(() => { if (logRef.current) logRef.current.scrollTop = 0; });
   };
 
   const addFiles = (incoming: File[]) => {
@@ -328,7 +417,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     setRequiresReattach(false);
   };
 
-  const runAnalysis = async (userContent?: string, skippedIds = skipQuestionIds) => {
+  const runAnalysis = async (userContent?: string, skippedIds = skipQuestionIds, hideUserMessage = false) => {
     const trimmed = userContent?.trim() ?? "";
     if (!trimmed && skippedIds.length === 0 && files.length === 0 && !translationsDirty) return;
     const attachmentNote = files.length ? `${files.length} ${locale === "es" ? "archivo(s) adjunto(s)" : "attachment(s) included"}` : "";
@@ -336,7 +425,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     const answeredQuestion = trimmed ? assessment?.questions.find((question) => !skippedIds.includes(question.id)) : undefined;
     const quoted = answeredQuestion?.prompt;
     const noteMessages = (assessment?.questions ?? []).filter((question) => skippedIds.includes(question.id)).map((question) => ({ role: "assistant" as const, content: `${text.skipNote} ${question.prompt}`, locale, echo: true, note: true }));
-    const nextMessages = [...messages, ...noteMessages, ...(content ? [{ role: "user" as const, content, locale, quoted }] : [])];
+    const nextMessages = [...messages, ...noteMessages, ...(content ? [{ role: "user" as const, content, locale, quoted, hidden: hideUserMessage }] : [])];
 
     const attempt = async () => {
       setBusy(true);
@@ -354,7 +443,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         }));
         files.forEach((file) => form.append("media", file, file.name));
         const body = accessToken.startsWith("demo.")
-          ? demoAssessment(locale, content)
+          ? demoAssessment(locale, content, nextMessages, assessment)
           : await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) }).then(async (response) => {
             const result = await response.json().catch(() => ({})) as IntakeAssessment & { error?: string };
             if (!response.ok) throw new Error(apiError(response.status, result, locale));
@@ -385,6 +474,24 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     setSkipAcknowledged(false);
   };
 
+  const toggleBundleTask = (task: string) => {
+    setBundleTasks((current) => current.includes(task) ? current.filter((item) => item !== task) : [...current, task]);
+  };
+
+  const toggleCleaningAddOn = (id: string) => {
+    setSelectedCleaningAddOns((current) => Object.hasOwn(current, id) ? Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)) : { ...current, [id]: 1 });
+  };
+
+  const submitBundle = () => {
+    const custom = bundleCustom.trim();
+    const tasks = [...bundleTasks, ...(custom ? [custom] : [])];
+    if (!tasks.length) return;
+    const intro = locale === "es"
+      ? "Quiero agrupar estos trabajos pequeños en una sola visita:"
+      : "I want to bundle these small jobs into one visit:";
+    void runAnalysis(`${intro}\n${tasks.map((task) => `- ${task}`).join("\n")}`, skipQuestionIds, true);
+  };
+
   const confirmRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!assessment?.assessmentToken) return;
@@ -397,7 +504,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         const response = await fetch("/api/intake/confirm", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), scopeDetails: { ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}), ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}) } }),
+          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), scopeDetails: { ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}), ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}), ...(assessment.category === "cleaning" ? { serviceAnswers: cleaningAnswers, cleaningAddOns: selectedCleaningAddOns, estimatedRange: cleaningEstimate } : {}) } }),
           signal: AbortSignal.timeout(30_000),
         });
         const body = await response.json().catch(() => ({})) as { requestId?: string; error?: string };
@@ -430,8 +537,9 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
   };
 
   return <section className="chat-intake" data-testid="customer-intake" aria-labelledby="intake-title">
+    <div className={`intake-backbar${messages.length > 0 || assessment || bundleOpen ? "" : " intake-backbar--empty"}`}>{(messages.length > 0 || assessment || bundleOpen) && <button type="button" className="intake-restart" onClick={restartIntake}>← {text.restart}</button>}</div>
     <header className="chat-intake__header">
-      <div><p className="chat-intake__kicker">WECOVER HOME REPAIR</p><h1 id="intake-title">{text.title}</h1><p>{text.subtitle}</p></div>
+      <div><p className="chat-intake__kicker">WECOVER HOME SERVICES</p><h1 id="intake-title">{text.title}</h1><p>{text.subtitle}</p></div>
       <div className="language-switch" role="group" aria-label="Language"><button type="button" aria-pressed={locale === "en"} onClick={() => changeLocale("en")}>EN</button><button type="button" aria-pressed={locale === "es"} onClick={() => changeLocale("es")}>ES</button></div>
     </header>
 
@@ -442,8 +550,7 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
         return <li key={step} className={`intake-steps__step intake-steps__step--${state}`} aria-current={state === "current" ? "step" : undefined}><span className="intake-steps__dot"/>{step}</li>;
       })}
     </ol>
-
-    <div className="chat-log" ref={logRef} role="log" aria-live="polite" aria-relevant="additions">
+    <div className="chat-log" ref={(node) => { logRef.current = node; if (node && !messages.length && !assessment) node.scrollTop = 0; }} role="log" aria-live="polite" aria-relevant="additions">
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
       {messages.length === 0 && !assessment && <>
         <div className="intake-hero">
@@ -451,9 +558,10 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
             <label className="intake-hero__cta"><CameraIcon size={18}/>{text.photoCta}<input type="file" accept={fileAccept} multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
           </div>
         </div>
-        <div className="symptom-tiles"><span className="symptom-tiles__label">{text.tilesLabel}</span><div className="symptom-grid">{text.tiles.map((tile) => { const TileIcon = symptomIcons[tile.id]; return <button type="button" key={tile.id} onClick={() => void runAnalysis(tile.message)}><TileIcon size={22}/><span>{tile.label}</span></button>; })}</div></div>
+        {!bundleOpen ? <div className="service-picker"><span className="service-picker__label">{text.tilesLabel}</span><div className="service-grid">{text.tiles.map((tile) => { const TileIcon = serviceIcons[tile.id]; return <button type="button" key={tile.id} className={tile.id === "bundle" ? "service-card service-card--bundle" : "service-card"} onClick={() => tile.id === "bundle" ? setBundleOpen(true) : void runAnalysis(tile.message, skipQuestionIds, true)}><span className="service-card__icon"><TileIcon size={22}/></span><span><strong>{tile.label}</strong><small>{tile.description}</small></span>{tile.id === "bundle" && <span className="service-card__badge">{locale === "es" ? "UNA VISITA" : "ONE VISIT"}</span>}</button>; })}</div></div> : <section className="bundle-builder" aria-labelledby="bundle-title"><button type="button" className="bundle-builder__back" onClick={() => setBundleOpen(false)}>← {text.bundleBack}</button><div className="bundle-builder__heading"><span className="service-card__icon"><ClipboardIcon size={22}/></span><div><h2 id="bundle-title">{text.bundleTitle}</h2><p>{text.bundleHelp}</p></div></div><div className="bundle-task-grid">{text.bundleTasks.map((task) => <label key={task} className={bundleTasks.includes(task) ? "selected" : ""}><input type="checkbox" checked={bundleTasks.includes(task)} onChange={() => toggleBundleTask(task)}/><span>{task}</span></label>)}</div><label className="bundle-builder__custom"><span>{text.bundleCustom}</span><input value={bundleCustom} onChange={(event) => setBundleCustom(event.target.value)} placeholder={locale === "es" ? "Ej.: cambiar dos pomos" : "Example: Replace two doorknobs"}/></label><button type="button" className="primary bundle-builder__submit" disabled={!bundleTasks.length && !bundleCustom.trim()} onClick={submitBundle}><PlusIcon size={18}/>{text.bundleStart}</button></section>}
       </>}
       {messages.map((message, index) => {
+        if (message.hidden) return null;
         if (message.note) return <div className="chat-note" key={`note-${index}`}>{message.content}</div>;
         const next = messages[index + 1];
         const hasPendingCard = index === messages.length - 1 && Boolean(activeQuestion);
@@ -467,17 +575,19 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       {assessment && !busy && <div className="assessment" data-testid="intake-assessment">
         {assessment.safety.level === "emergency" && <div className="safety-guidance safety-guidance--emergency" role="alert"><WarningIcon size={22}/><div><strong>{locale === "es" ? "Posible emergencia" : "Possible emergency"}</strong><p>{assessment.safety.guidance}</p></div></div>}
         {assessment.safety.level !== "normal" && assessment.safety.level !== "emergency" && <details className={`safety-guidance safety-guidance--${assessment.safety.level} safety-collapsible`}><summary><WarningIcon size={18}/><strong>{text.safetyUrgent}</strong></summary><p>{assessment.safety.guidance}</p></details>}
-        {assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2>{assessment.category && (() => { const CatIcon = categoryIcon(assessment.category); return <span className="category-chip"><CatIcon size={13}/>{categoryLabel(assessment.category, locale)}</span>; })()}<p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{text.likelihood[candidate.likelihood] ?? candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}{(assessment.materialsHint?.length ?? 0) > 0 && <div className="materials-hint"><strong><WrenchIcon size={14}/>{text.materials}</strong><p>{assessment.materialsHint!.join(" · ")}</p><small>{text.materialsNote}</small></div>}</section>}
-        {activeQuestion && <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{text.questionStep.replace("{current}", String(assessment.questions.length - openQuestions.length + 1)).replace("{total}", String(assessment.questions.length))}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>}
+        {showDiagnosticAssessment && assessment.issueCandidates.length > 0 && !assessment.readyToConfirm && <section className="possible-issues" aria-labelledby="possible-issues-title"><h2 id="possible-issues-title">{text.possibleIssues}</h2>{assessment.category && (() => { const CatIcon = categoryIcon(assessment.category); return <span className="category-chip"><CatIcon size={13}/>{categoryLabel(assessment.category, locale)}</span>; })()}<p className="tentative-note">{text.tentative}</p>{(showAllIssues ? assessment.issueCandidates : assessment.issueCandidates.slice(0, 2)).map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <article key={candidate.id}><span className="issue-icon"><CandidateIcon size={20}/></span><div className="issue-body"><div><strong>{candidate.label}</strong><span className={`likelihood likelihood--${candidate.likelihood}`}>{text.likelihood[candidate.likelihood] ?? candidate.likelihood}</span></div><p>{candidate.reason}</p>{candidate.evidenceNeeded.length > 0 && <small><PhotoIcon size={16}/>{text.evidence}: {candidate.evidenceNeeded.join(", ")}</small>}</div></article>; })}{assessment.issueCandidates.length > 2 && <button type="button" className="issues-more" onClick={() => setShowAllIssues((value) => !value)}>{showAllIssues ? text.fewerIssues : `${text.moreIssues} (${assessment.issueCandidates.length - 2})`}</button>}{(assessment.materialsHint?.length ?? 0) > 0 && <div className="materials-hint"><strong><WrenchIcon size={14}/>{text.materials}</strong><p>{assessment.materialsHint!.join(" · ")}</p><small>{text.materialsNote}</small></div>}</section>}
+        {assessment.category === "cleaning" && !assessment.readyToConfirm && activeQuestion?.id !== "cleaning-1-of-5" && <section className="cleaning-options" aria-labelledby="cleaning-options-title"><div><p className="eyebrow">{locale === "es" ? "SERVICIOS ADICIONALES" : "CLEANING ADD-ONS"}</p><h2 id="cleaning-options-title">{locale === "es" ? "¿Quiere añadir algo?" : "Would you like to add anything?"}</h2><p>{locale === "es" ? "Seleccione todo lo que necesite. Puede cambiarlo antes de confirmar." : "Select everything you need. You can change this before confirming."}</p></div><div className="cleaning-options__grid">{cleaningAddOns.map((addOn) => { const selected = Object.hasOwn(selectedCleaningAddOns, addOn.id); const quantity = selectedCleaningAddOns[addOn.id] ?? ""; return <div className={`cleaning-option${selected ? " cleaning-option--selected" : ""}`} key={addOn.id}><label><input type="checkbox" checked={selected} onChange={() => toggleCleaningAddOn(addOn.id)}/><span><strong>{locale === "es" ? addOn.es : addOn.en}</strong><small>+${addOn.low}–${addOn.high}{addOn.quantity ? ` / ${locale === "es" ? addOn.unitEs : addOn.unitEn}` : ""}</small></span></label>{selected && addOn.quantity && <label className="cleaning-option__quantity"><span>{locale === "es" ? "Cantidad" : "Quantity"}</span><input type="number" min="1" max="20" value={quantity} onChange={(event) => { const value = event.target.value; setSelectedCleaningAddOns((current) => ({ ...current, [addOn.id]: value === "" ? "" : Math.min(20, Math.max(1, Number(value))) })); }} onBlur={() => setSelectedCleaningAddOns((current) => current[addOn.id] === "" ? { ...current, [addOn.id]: 1 } : current)}/></label>}</div>; })}</div><div className="cleaning-estimate"><span>{locale === "es" ? "Estimado típico en Charlotte" : "Typical Charlotte estimate"}</span><strong>${cleaningEstimate.low}–${cleaningEstimate.high}</strong><small>{locale === "es" ? "Estimación, no precio final. El profesional confirma el alcance y el presupuesto." : "Estimate, not a final price. The pro confirms the scope and quote."}</small></div></section>}
+        {activeQuestion && <section className="followup-questions" aria-label={locale === "es" ? "Pregunta de seguimiento" : "Follow-up question"}><p className="question-progress">{(() => { const demoProgress = activeQuestion.id.match(/-(\d+)-of-(\d+)$/); return text.questionStep.replace("{current}", demoProgress?.[1] ?? String(assessment.questions.length - openQuestions.length + 1)).replace("{total}", demoProgress?.[2] ?? String(assessment.questions.length)); })()}</p><article key={activeQuestion.id}><p>{activeQuestion.prompt}</p>{activeQuestion.requiredForSafety ? <small className="required-safety">{text.safetyRequired}</small> : <button type="button" className={skipQuestionIds.includes(activeQuestion.id) ? "selected" : ""} onClick={() => chooseSkip(activeQuestion.id)}>{text.skip}</button>}</article></section>}
         {!activeQuestion && !assessment.readyToConfirm && assessment.safety.level !== "emergency" && <p className="intake-nudge" role="note">{text.moreInfo}</p>}
         {skipQuestionIds.length > 0 && <div className="skip-warning" role="note"><div className="skip-undos">{assessment.questions.filter((question) => skipQuestionIds.includes(question.id)).map((question) => <button key={question.id} type="button" className="skip-undo" onClick={() => chooseSkip(question.id)}><span>{text.skipUndo}</span>{question.prompt}</button>)}</div><p>{text.skipWarning}</p><label><input type="checkbox" checked={skipAcknowledged} onChange={(event) => setSkipAcknowledged(event.target.checked)}/>{text.skipAcknowledge}</label><button type="button" disabled={!skipAcknowledged} onClick={() => void runAnalysis(undefined, skipQuestionIds)}>{text.skipContinue}</button></div>}
         {translationsDirty && <div className="translation-sync"><button type="button" onClick={() => void runAnalysis()} disabled={busy || requiresReattach}>{text.saveTranslation}</button></div>}
-        {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div><fieldset><legend>{text.possibleIssues}{assessment.category && (() => { const CatIcon = categoryIcon(assessment.category); return <span className="category-chip"><CatIcon size={13}/>{categoryLabel(assessment.category, locale)}</span>; })()}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset>{(assessment.materialsHint?.length ?? 0) > 0 && <div className="materials-hint"><strong><WrenchIcon size={14}/>{text.materials}</strong><p>{assessment.materialsHint!.join(" · ")}</p><small>{text.materialsNote}</small></div>}<label>{text.name}<input name="customerName" autoComplete="name" required/></label><label>{text.address}<input name="address" autoComplete="street-address" required/></label><label>{text.accessNotes}<input name="accessNotes" autoComplete="off"/></label><label>{text.pets}<input name="pets" autoComplete="off"/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}
+        {assessment.readyToConfirm && assessment.category === "cleaning" && <section className="cleaning-summary"><div><p className="eyebrow">{locale === "es" ? "RESUMEN PARA EL PROFESIONAL" : "SUMMARY FOR THE PRO"}</p><h2>{locale === "es" ? "Su solicitud de limpieza" : "Your cleaning request"}</h2><p>{locale === "es" ? "Esto se enviará al profesional con su solicitud." : "This will be sent to the pro with your request."}</p></div><dl>{cleaningAnswers.map((item, index) => <div key={`${item.question}-${index}`}><dt>{item.question ?? (locale === "es" ? "Detalle" : "Detail")}</dt><dd>{item.answer}</dd></div>)}</dl>{Object.keys(selectedCleaningAddOns).length > 0 && <div className="cleaning-summary__addons"><strong>{locale === "es" ? "Servicios adicionales" : "Add-ons"}</strong><ul>{cleaningAddOns.filter((addOn) => Object.hasOwn(selectedCleaningAddOns, addOn.id)).map((addOn) => { const quantity = Number(selectedCleaningAddOns[addOn.id]) || 1; return <li key={addOn.id}><span>{locale === "es" ? addOn.es : addOn.en}{addOn.quantity ? ` × ${quantity}` : ""}</span><b>+${addOn.low * quantity}–${addOn.high * quantity}</b></li>; })}</ul></div>}<div className="cleaning-estimate"><span>{locale === "es" ? "Estimado típico en Charlotte" : "Typical Charlotte estimate"}</span><strong>${cleaningEstimate.low}–${cleaningEstimate.high}</strong><small>{locale === "es" ? "No es un precio final. El profesional confirmará el alcance y el presupuesto." : "Not a final price. The pro will confirm the scope and quote."}</small></div></section>}
+        {assessment.readyToConfirm && assessment.assessmentToken && assessment.safety.level !== "emergency" && <form className="confirm-request" onSubmit={confirmRequest}><div><h2>{text.confirmTitle}</h2><p>{text.confirmHelp}</p></div>{showDiagnosticAssessment && <><fieldset><legend>{text.possibleIssues}{assessment.category && (() => { const CatIcon = categoryIcon(assessment.category); return <span className="category-chip"><CatIcon size={13}/>{categoryLabel(assessment.category, locale)}</span>; })()}</legend>{assessment.issueCandidates.map((candidate) => { const CandidateIcon = issueIcon(candidate.label); return <label key={candidate.id}><input type="checkbox" checked={selectedIssueIds.includes(candidate.id)} onChange={(event) => setSelectedIssueIds((current) => event.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))}/><span className="issue-icon"><CandidateIcon size={18}/></span><span><strong>{candidate.label}</strong><small>{candidate.reason}</small></span></label>; })}</fieldset>{(assessment.materialsHint?.length ?? 0) > 0 && <div className="materials-hint"><strong><WrenchIcon size={14}/>{text.materials}</strong><p>{assessment.materialsHint!.join(" · ")}</p><small>{text.materialsNote}</small></div>}</>}<label>{text.name}<input name="customerName" autoComplete="name" required/></label><label className="address-field"><span>{text.address}</span><input name="address" autoComplete="street-address" value={serviceAddress} onChange={(event) => setServiceAddress(event.target.value)} required/>{addressSuggestions.length > 0 && <span className="address-suggestions" role="listbox" aria-label={locale === "es" ? "Direcciones sugeridas" : "Suggested addresses"}>{addressSuggestions.map((suggestion) => <button type="button" role="option" key={suggestion} onMouseDown={(event) => event.preventDefault()} onClick={() => setServiceAddress(suggestion)}>{suggestion}</button>)}</span>}</label><label>{text.accessNotes}<input name="accessNotes" autoComplete="off"/></label><label>{text.pets}<input name="pets" autoComplete="off"/></label><label className="confirm-request__ack"><input type="checkbox" checked={uncertaintyAcknowledged} onChange={(event) => setUncertaintyAcknowledged(event.target.checked)} required/><span>{assessment.uncertaintyWarning ?? text.uncertainty}</span></label><button className="primary confirm-request__submit" disabled={confirming || selectedIssueIds.length === 0 || requiresReattach || translationsDirty}>{confirming ? text.confirming : text.confirm}</button></form>}
       </div>}
       {error && <div className="chat-error" role="alert"><p>{error}</p>{(confirmationRetry || lastAttempt) && <button type="button" onClick={() => void (confirmationRetry ?? lastAttempt)?.()} disabled={busy || confirming || requiresReattach}>{text.retry}</button>}</div>}
     </div>
 
-    <div className="chat-composer">
+    <div className={`chat-composer${showComposer ? "" : " chat-composer--hidden"}`} aria-hidden={!showComposer}>
       {files.length > 0 && <div className="attachment-tray" aria-label={locale === "es" ? "Archivos adjuntos" : "Attachments"}>{files.map((file, index) => <div className="attachment" key={`${file.name}-${file.lastModified}`}><PhotoIcon size={18}/><span><strong>{file.name}</strong><small>{formatSize(file.size)}</small></span><button type="button" aria-label={`${text.remove} ${file.name}`} onClick={() => setFiles((current) => current.filter((_, fileIndex) => fileIndex !== index))}><CloseIcon/></button></div>)}</div>}
       {files.length > 0 && <div className="media-consent"><p>{text.mediaPrivacy}</p><label><input type="checkbox" checked={mediaConsent} onChange={(event) => setMediaConsent(event.target.checked)}/><span>{text.mediaConsent}</span></label></div>}
       {fileError && <p className="file-error" role="alert">{fileError}</p>}

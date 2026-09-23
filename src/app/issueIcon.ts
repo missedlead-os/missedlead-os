@@ -2,7 +2,7 @@
  * 후보 이슈 라벨(EN/ES 키워드)을 icons.tsx의 아이콘 컴포넌트로 매핑한다.
  * 예: "leak/pipe"→물방울, "gas/smoke"→경고, "AC/heat"→온도계.
  */
-import { ApplianceIcon, BoltIcon, BugIcon, DropletIcon, HouseIcon, PaintRollerIcon, ThermometerIcon, WarningIcon, WrenchIcon, type IconComponent } from "./icons";
+import { ApplianceIcon, BoltIcon, BugIcon, DropletIcon, EmptyBoxIcon, HouseIcon, PaintRollerIcon, StarIcon, ThermometerIcon, WarningIcon, WrenchIcon, type IconComponent } from "./icons";
 
 const issueIconMatchers: Array<[RegExp, IconComponent]> = [
   [/gas|smoke|fire|flame|carbon|co2|burning|gasolina|humo|fuego/i, WarningIcon],
@@ -27,6 +27,10 @@ const categoryMeta: Record<string, { icon: IconComponent; en: string; es: string
   painting: { icon: PaintRollerIcon, en: "Painting", es: "Pintura" },
   pest_control: { icon: BugIcon, en: "Pest control", es: "Control de plagas" },
   handyman: { icon: WrenchIcon, en: "Handyman", es: "Reparaciones" },
+  cleaning: { icon: StarIcon, en: "Cleaning", es: "Limpieza" },
+  removal: { icon: EmptyBoxIcon, en: "Removal", es: "Retiro" },
+  outdoor: { icon: HouseIcon, en: "Outdoor work", es: "Trabajo exterior" },
+  installation: { icon: ApplianceIcon, en: "Installation", es: "Instalación" },
   general: { icon: HouseIcon, en: "General", es: "General" },
 };
 
