@@ -96,11 +96,17 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
 
 test("provider outage keeps the customer message and offers a retry", async ({ page }) => {
   const dashboard = emptyDashboard();
+  const attempts: string[] = [];
   await page.route("**/api/**", async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path === "/api/capabilities") return fulfill(route, 200, { payments: { enabled: false, provider: "stripe" } });
     if (path === "/api/dashboard") return fulfill(route, 200, dashboard);
-    if (path === "/api/intake/analyze") return fulfill(route, 503, { error: "AI_PROVIDER_UNAVAILABLE" });
+    if (path === "/api/intake/analyze") {
+      const multipart = route.request().postDataBuffer()?.toString("utf8") ?? "";
+      attempts.push(multipart.split("\r\n\r\n")[1]?.split("\r\n--")[0] ?? "");
+      if (attempts.length === 1) return fulfill(route, 503, { error: "AI_PROVIDER_UNAVAILABLE" });
+      return fulfill(route, 200, { reply: "Please describe which breaker trips.", locale: "en", issueCandidates: [], questions: [{ id: "breaker", prompt: "Which breaker trips?", requiredForSafety: false }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "retry-assessment" });
+    }
     return fulfill(route, 404, { error: "Unhandled" });
   });
 
@@ -110,6 +116,13 @@ test("provider outage keeps the customer message and offers a retry", async ({ p
   await expect(page.getByRole("log").getByText("The breaker keeps tripping in the kitchen.")).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("temporarily unavailable");
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect(page.getByRole("log").getByText("Please describe which breaker trips.")).toBeVisible();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByRole("log").getByText("The breaker keeps tripping in the kitchen.")).toHaveCount(1);
+  expect(attempts).toHaveLength(2);
+  expect(JSON.parse(attempts[0]).history).toEqual([{ role: "user", content: "The breaker keeps tripping in the kitchen." }]);
+  expect(attempts[1]).toBe(attempts[0]);
 });
 
 test("Spanish mobile customer can confirm a provisional scope and enter matching", async ({ page }) => {

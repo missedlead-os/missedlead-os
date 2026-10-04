@@ -1,5 +1,7 @@
 # WeCover free-tier deployment (24/7)
 
+> Release gate update (2026-10-04): this is a historical setup guide, not approval to launch. Follow `RELEASE_READINESS_20261004.md` and `COMMERCIALIZATION_OWNER_HANDOFF.md` before deployment. The prepared Blueprint uses Node 24, requires ffmpeg/ffprobe, and defaults to `DEMO_MODE=false` / `PAYMENTS_MODE=disabled`. Public demo login never issues an operator token. Do not run the remote seed or schema commands below against production or create new access without owner authorization. Host health alone does not prove release readiness.
+
 Single free Render web service serves the built UI + API on one origin.
 Supabase Cloud free project provides Postgres + Auth + Storage.
 Total cost: $0. No card required.
