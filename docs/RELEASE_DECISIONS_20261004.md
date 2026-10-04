@@ -77,4 +77,4 @@ Follow-up complete server suite: **324 passed / 22 files**; focused demo boundar
 
 Subsequent independent public-smoke coverage adds 24 tests: complete local server suite **348 passed / 24 files**. Keepalive commands/schedule were preserved and annotated as non-gating. Current remote push CI at `405d490` is successful, but this does not cover our unpushed commits or the older live revision. [PUBLIC_SMOKE.md](PUBLIC_SMOKE.md) records the exact read-only CI observation and remaining deployment/media/DB proof.
 
-These are concrete decisions for remaining boundaries, not repeated approvals for local code/tests.
+These are concrete decisions for remaining boundaries, not repeated approvals for local code/tests. On 2026-10-04 the owner approved uploading `codex/release-readiness-20261004` and creating a draft PR targeting master. Earlier “held” statements above describe the pre-approval receipt. Publication and current exact-head CI are recorded in the PR; merge, production changes, live model calls and other external actions remain unapproved.

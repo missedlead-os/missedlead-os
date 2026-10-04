@@ -39,4 +39,4 @@ The full local server suite after adding smoke coverage passed **348 tests / 24 
 | Protected release readiness | Not run; approved manifest/operator evidence absent | Still required for deployed manifest/payment binding |
 | Isolated DB/RLS/Storage and native RC | Blocked as described in release decisions | Still required before launch |
 
-Push, PR, remote workflow changes, deployment, paid Gemini calls, external sends/payments and data deletion remain on hold. No existing keepalive service behavior was interrupted.
+The owner subsequently approved uploading this branch and creating a master-targeted draft PR on 2026-10-04. The workflow changes take effect only when GitHub runs the proposed PR CI; keepalive's deployed/default-branch schedule and curls remain unchanged. Merge/deployment, paid Gemini calls, external sends/payments and data deletion remain on hold. No existing keepalive service behavior was interrupted.

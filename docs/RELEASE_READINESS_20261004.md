@@ -2,7 +2,7 @@
 
 WeCover is a Charlotte home repair platform. The primary product is the native Expo/React Native iOS and Android app; React/Vite is a secondary website. Express/TypeScript handles authenticated intake, matching, provider and operator workflows; Supabase supplies Auth, Postgres and private Storage. Gemini inference and Stripe activation have separate integration gates.
 
-This is a local code preparation receipt. No production deployment, remote push, account creation, external message, charge, deletion, or database migration was performed.
+This is a code preparation receipt. Production deployment, account creation, external messages, charges, deletion, and database migrations were not performed. The owner subsequently approved this branch's upload and a draft PR targeting master on 2026-10-04; publication evidence and current remote checks belong to that PR. Merge and deployment remain separate boundaries.
 
 ## Source and isolation
 
@@ -76,7 +76,7 @@ Mock browser scenarios work without Docker. For the real app, configure only an 
 
 ## Prepared deployment procedure — not executed
 
-1. Review this branch's diff and approve the destination branch before push. If permitted, open a draft PR; do not push master because it may deploy.
+1. Branch upload and a draft PR targeting master were explicitly approved on 2026-10-04. Review that PR and its current exact-head CI; do not push or merge master because it may deploy.
 2. Verify the selected host has Node 24 and ffmpeg/ffprobe, install locked dependencies including build tools, and run `pnpm build`. `render.yaml` runs `pnpm check:runtime && pnpm start:api`.
 3. Owner injects existing approved secrets into the deployment secret manager and approves migrations for that exact isolated project. Never publish `.env` or reset project data. Keep demo and payment modes disabled and do not enable external send workers.
 4. Validate a real deployment manifest with `node scripts/validate-deployment-manifest.mjs <private-manifest.json>`, bind it via `DEPLOYMENT_MANIFEST_JSON`, and verify authenticated allowlisted `/api/ops/readiness`. Example fixtures only test validation and cannot authorize release.
