@@ -75,4 +75,6 @@ React Compiler/Fast Refresh lint cleanup, formatting long components, persona un
 
 Follow-up complete server suite: **324 passed / 22 files**; focused demo boundary **19 passed**, including 15 new account-authority cases. Production TypeScript/Vite build passed; lint remains **0 errors / 31 warnings**. Repository and root/mobile export secret scan has **0 findings**. Prior mobile 41 tests, typecheck, all-platform exports, and Chromium 19 pass / 1 real-DB skip remain applicable because mobile/UI implementations were not changed in this follow-up. CI additions are prepared and locally executed commands passed; no remote CI result is claimed. Push, draft PR, deployment and paid calls remain held.
 
+Subsequent independent public-smoke coverage adds 24 tests: complete local server suite **348 passed / 24 files**. Keepalive commands/schedule were preserved and annotated as non-gating. Current remote push CI at `405d490` is successful, but this does not cover our unpushed commits or the older live revision. [PUBLIC_SMOKE.md](PUBLIC_SMOKE.md) records the exact read-only CI observation and remaining deployment/media/DB proof.
+
 These are concrete decisions for remaining boundaries, not repeated approvals for local code/tests.

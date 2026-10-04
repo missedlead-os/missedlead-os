@@ -27,7 +27,7 @@ Commands were run in the isolated copy on Windows, Node 24.16.0 / pnpm 9.15.9, w
 | --- | --- |
 | `pnpm install --frozen-lockfile` | Passed |
 | `pnpm --dir mobile install --frozen-lockfile` | Passed, 83 seconds; tool initially timed out while process continued |
-| `pnpm run test --maxWorkers=1` | Final follow-up: 324 passed, 22 files; original baseline was 309 |
+| `pnpm run test --maxWorkers=1` | Final keepalive/smoke follow-up: 348 passed, 24 files; original baseline was 309 |
 | `pnpm run test:mobile` | 41 passed |
 | `pnpm --dir mobile typecheck` | Passed |
 | `pnpm lint` | 0 errors, 31 existing warnings |
@@ -43,6 +43,8 @@ Commands were run in the isolated copy on Windows, Node 24.16.0 / pnpm 9.15.9, w
 Logs are in the parent `task` directory: `baseline-*.log`, `final-server-tests.log`, `final-browser.log`, `final-build.log`, `final-lint.log`, `mobile-export.log`. Browser artifacts are under ignored `artifacts/` and `test-results/`. Mocked browser/payment flows prove client behavior, not Supabase persistence, Gemini inference, real Stripe, or signed device execution.
 
 Follow-up threat review, secret-free existing-setting inventory, required input names, read-only deployment observations and the consolidated owner decision checklist are in [RELEASE_DECISIONS_20261004.md](RELEASE_DECISIONS_20261004.md). The full server rerun/build/lint logs are `../followup-server-tests.log`, `../followup-build.log`, `../followup-lint.log`.
+
+Keepalive is a best-effort anti-idle job that swallows curl failures. Its green status cannot be used as a health/release gate. See [PUBLIC_SMOKE.md](PUBLIC_SMOKE.md) for the independent failing smoke CLI, local HTTP negative tests, and the explicit separation of push CI, live deployment, authenticated DB/RLS readiness and host media tools. The latest full local test log is `../keepalive-server-tests.log`.
 
 ## Remaining launch blockers, in priority order
 

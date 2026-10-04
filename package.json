@@ -11,6 +11,7 @@
     "dev:web": "vite",
     "start:api": "tsx server/index.ts",
     "check:runtime": "node scripts/check-runtime.mjs",
+    "check:public-smoke": "tsx scripts/public-smoke.ts",
     "build": "tsc -b && vite build",
     "lint": "oxlint --ignore-pattern \"supabase/.temp/**\"",
     "test": "vitest run --exclude server/app.integration.test.ts --exclude server/pilot.integration.test.ts",

@@ -50,6 +50,8 @@ optional:  UptimeRobot free 5-min ping (prevents Render 15-min sleep)
 
 ## 3. Keep it awake
 
+Keepalive is best-effort anti-idle, not health monitoring: its curl failures are ignored. A green run does not prove app/DB availability. Use the separately failing `pnpm check:public-smoke` described in [PUBLIC_SMOKE.md](PUBLIC_SMOKE.md), then complete authenticated readiness and DB/media release gates.
+
 - **Supabase anti-pause**: repo Settings > Variables > Actions — set
   `PUBLIC_APP_URL` and `PUBLIC_SUPABASE_URL`. `.github/workflows/keepalive.yml`
   then pings every 6 hours.
