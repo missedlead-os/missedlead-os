@@ -26,5 +26,8 @@ jobs:
       - run: pnpm test
       - run: pnpm test:mobile
       - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      # Deterministic browser contract lane; no live Auth, Gemini, or payment calls.
+      - run: pnpm exec playwright test
       - run: pnpm --dir mobile install --frozen-lockfile
       - run: pnpm --dir mobile typecheck

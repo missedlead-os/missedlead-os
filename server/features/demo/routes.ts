@@ -40,6 +40,8 @@ export function registerDemoRoutes(app: Express) {
    if(error || !data.session || data.user?.app_metadata.demo !== true) {res.status(503).json({error:'demo_unavailable'});return;}
    const profile = await client.from('profiles').select('role,is_demo').eq('id',data.user.id).single();
    if(profile.error || profile.data?.role !== role || profile.data?.is_demo !== true) {res.status(503).json({error:'demo_unavailable'});return;}
+   const authority = await client.rpc('is_operator');
+   if (authority.error || authority.data !== false) {res.status(503).json({error:'demo_unavailable'});return;}
    res.json({access_token:data.session.access_token,refresh_token:data.session.refresh_token,actor:{id:data.user.id,email:data.user.email,role}});
   } catch {res.status(503).json({error:'demo_unavailable'});}
  });

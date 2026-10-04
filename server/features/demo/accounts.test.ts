@@ -3,16 +3,18 @@ import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerDemoRoutes } from './routes.js';
 
-const boundary = vi.hoisted(() => ({ signIn: vi.fn(), profile: vi.fn() }));
+const boundary = vi.hoisted(() => ({ signIn: vi.fn(), profile: vi.fn(), authority: vi.fn() }));
 vi.mock('@supabase/supabase-js', () => ({
  createClient: () => ({
   auth: { signInWithPassword: boundary.signIn },
   from: () => ({ select: () => ({ eq: () => ({ single: boundary.profile }) }) }),
+  rpc: boundary.authority,
  }),
 }));
 
 beforeEach(() => {
  vi.clearAllMocks();
+ boundary.authority.mockResolvedValue({ data: false, error: null });
  for (const [name, value] of Object.entries({
   DEMO_MODE: 'true', SUPABASE_URL: 'https://demo.example.invalid', SUPABASE_ANON_KEY: 'fixture',
   DEMO_CUSTOMER_EMAIL: 'customer@example.invalid', DEMO_CUSTOMER_PASSWORD: 'fixture-password',
@@ -44,6 +46,7 @@ describe('demo sessions cannot grant production authority', () => {
   expect(response.body).toEqual({ error: 'demo_operator_access_disabled' });
   expect(boundary.signIn).not.toHaveBeenCalled();
   expect(boundary.profile).not.toHaveBeenCalled();
+  expect(boundary.authority).not.toHaveBeenCalled();
   expect(response.headers['cache-control']).toBe('no-store');
  });
  for (const role of ['customer', 'provider']) {
@@ -53,6 +56,7 @@ describe('demo sessions cannot grant production authority', () => {
    expect(response.status).toBe(200);
    expect(response.body.actor.role).toBe(role);
    expect(boundary.signIn).toHaveBeenCalledWith({ email: `${role}@example.invalid`, password: 'fixture-password' });
+   expect(boundary.authority).toHaveBeenCalledWith('is_operator');
   });
   for (const [metadataDemo, profileDemo] of [[false, true], [true, false]]) {
    it(`rejects ${role} without both independent demo markers (${metadataDemo}/${profileDemo})`, async () => {
@@ -69,5 +73,14 @@ describe('demo sessions cannot grant production authority', () => {
    expect(response.status).toBe(503);
    expect(response.body).not.toHaveProperty('access_token');
   });
+  for (const result of [{ data: true, error: null }, { data: null, error: null }, { data: false, error: { message: 'unavailable' } }]) {
+   it(`rejects ${role} when operator authority is present or unverified (${String(result.data)}/${Boolean(result.error)})`, async () => {
+    account(role);
+    boundary.authority.mockResolvedValue(result);
+    const response = await request(app()).post('/api/demo/login').send({ role });
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ error: 'demo_unavailable' });
+   });
+  }
  }
 });
