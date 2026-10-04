@@ -397,4 +397,10 @@ test("claim-derived route cannot be switched by URL", async ({ page }) => {
   await page.evaluate(() => { window.history.pushState(null, "", "/operator"); window.dispatchEvent(new PopStateEvent("popstate")); });
   await expect(page).toHaveURL(/\/provider$/);
   await expect(page.getByTestId("operator-console")).toHaveCount(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/provider$/);
+  await expect(page.getByTestId("operator-console")).toHaveCount(0);
+  await page.goForward();
+  await expect(page).toHaveURL(/\/provider$/);
+  await expect(page.getByTestId("operator-console")).toHaveCount(0);
 });

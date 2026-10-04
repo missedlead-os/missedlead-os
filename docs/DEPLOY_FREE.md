@@ -1,5 +1,7 @@
 # WeCover free-tier deployment (24/7)
 
+> Release gate update (2026-10-04): this is a historical setup guide, not approval to launch. Follow `RELEASE_READINESS_20261004.md` and `COMMERCIALIZATION_OWNER_HANDOFF.md` before deployment. The prepared Blueprint uses Node 24, requires ffmpeg/ffprobe, and defaults to `DEMO_MODE=false` / `PAYMENTS_MODE=disabled`. Public demo login never issues an operator token. Do not run the remote seed or schema commands below against production or create new access without owner authorization. Host health alone does not prove release readiness.
+
 Single free Render web service serves the built UI + API on one origin.
 Supabase Cloud free project provides Postgres + Auth + Storage.
 Total cost: $0. No card required.
@@ -47,6 +49,8 @@ optional:  UptimeRobot free 5-min ping (prevents Render 15-min sleep)
    health check: `/api/capabilities`.
 
 ## 3. Keep it awake
+
+Keepalive is best-effort anti-idle, not health monitoring: its curl failures are ignored. A green run does not prove app/DB availability. Use the separately failing `pnpm check:public-smoke` described in [PUBLIC_SMOKE.md](PUBLIC_SMOKE.md), then complete authenticated readiness and DB/media release gates.
 
 - **Supabase anti-pause**: repo Settings > Variables > Actions — set
   `PUBLIC_APP_URL` and `PUBLIC_SUPABASE_URL`. `.github/workflows/keepalive.yml`

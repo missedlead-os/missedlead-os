@@ -1,6 +1,8 @@
 # Keep-alive ping: prevents the free Supabase project from auto-pausing
 # (7 days idle) and warms the free Render service. Runs every 6 hours —
 # ~120 workflow runs/month, within the private-repo free minutes.
+# Best-effort anti-idle only: a green run is NOT app/DB health or release evidence.
+# Independent public smoke: pnpm check:public-smoke (fails on HTTP/contract errors).
 # Required repo variables (Settings > Secrets and variables > Actions > Variables):
 #   PUBLIC_APP_URL       e.g. https://wecover.onrender.com
 #   PUBLIC_SUPABASE_URL  e.g. https://<ref>.supabase.co
