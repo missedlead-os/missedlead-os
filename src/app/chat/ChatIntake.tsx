@@ -8,6 +8,7 @@ import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
 import { ApplianceIcon, CameraIcon, ClipboardIcon, EmptyBoxIcon, HouseIcon, PlusIcon, StarIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
 
 import { categoryIcon, categoryLabel, issueIcon } from "../issueIcon";
+import { ApiFailure, demoFallbackApplies, demoRequestId, readApiBody } from "../demo";
 import type { IntakeAssessment, IntakeLocale, IntakeMessage } from "./types";
 
 type DisplayMessage = IntakeMessage & { locale: IntakeLocale; echo?: boolean; quoted?: string; note?: boolean; hidden?: boolean };
@@ -43,13 +44,19 @@ const demoQuestions: Record<ServiceId, Record<IntakeLocale, string[]>> = {
   bundle: { en: ["Is there another small job you want to include in this visit?", "Which rooms are these jobs in?", "Do any tasks involve plumbing, electrical work, or heavy mounting?"], es: ["¿Hay otro trabajo pequeño que quiera incluir en esta visita?", "¿En qué habitaciones están estos trabajos?", "¿Alguna tarea incluye plomería, electricidad o montaje pesado?"] },
 };
 
-const demoAssessment = (locale: IntakeLocale, content: string, history: DisplayMessage[], previous: IntakeAssessment | null): IntakeAssessment => {
+const inferService = (history: DisplayMessage[]): ServiceId => {
   const context = history.map((message) => message.content).join("\n").toLowerCase();
-  const service: ServiceId = /bundle|small jobs|agrupar|trabajos pequeños/.test(context) ? "bundle"
+  return /bundle|small jobs|agrupar|trabajos pequeños/.test(context) ? "bundle"
     : /clean|limpieza/.test(context) ? "cleaning"
       : /remov|retir/.test(context) ? "removal"
         : /outdoor|exterior|jardín|yard|fence/.test(context) ? "outdoor"
           : /install|assemble|instalar|armar/.test(context) ? "install" : "repair";
+};
+
+const categoryByService: Record<ServiceId, string> = { cleaning: "cleaning", repair: "handyman", removal: "removal", outdoor: "outdoor", install: "installation", bundle: "bundle" };
+
+const demoAssessment = (locale: IntakeLocale, content: string, history: DisplayMessage[], previous: IntakeAssessment | null): IntakeAssessment => {
+  const service = inferService(history);
   const questions = demoQuestions[service][locale];
   const priorMatch = previous?.questions[0]?.id.match(/-(\d+)-of-/);
   const questionIndex = priorMatch ? Number(priorMatch[1]) : 0;
@@ -57,7 +64,6 @@ const demoAssessment = (locale: IntakeLocale, content: string, history: DisplayM
   const labelByService: Record<ServiceId, Record<IntakeLocale, string>> = {
     cleaning: { en: "Deep cleaning service", es: "Servicio de limpieza profunda" }, repair: { en: "Home repair service", es: "Servicio de reparación" }, removal: { en: "Removal service", es: "Servicio de retiro" }, outdoor: { en: "Outdoor service", es: "Servicio exterior" }, install: { en: "Installation and assembly", es: "Instalación y montaje" }, bundle: { en: "Bundled small-job list", es: "Lista agrupada de trabajos pequeños" },
   };
-  const categoryByService: Record<ServiceId, string> = { cleaning: "cleaning", repair: "handyman", removal: "removal", outdoor: "outdoor", install: "installation", bundle: "bundle" };
   return {
     reply: nextQuestion ?? (locale === "es" ? "Perfecto. Revise los detalles y confirme su solicitud." : "Great. Review the details and confirm your request."),
     locale,
@@ -442,16 +448,20 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           translations: Object.values(translations).filter(({ translationToken }) => Boolean(translationToken)).map(({ original, translated, sourceLocale, targetLocale, translationToken }) => ({ original, translated, sourceLocale, targetLocale, translationToken })),
         }));
         files.forEach((file) => form.append("media", file, file.name));
-        const body = accessToken.startsWith("demo.")
-          ? demoAssessment(locale, content, nextMessages, assessment)
-          : await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) }).then(async (response) => {
-            const result = await response.json().catch(() => ({})) as IntakeAssessment & { error?: string };
-            if (!response.ok) throw new Error(apiError(response.status, result, locale));
-            return result;
-          });
-        setAssessment(body);
-        setMessages([...nextMessages, { role: "assistant", content: body.reply, locale: body.locale }]);
-        setSelectedIssueIds(body.issueCandidates.filter((candidate) => candidate.likelihood !== "low").map((candidate) => candidate.id));
+        const body = await fetch("/api/intake/analyze", { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: form, signal: AbortSignal.timeout(75_000) }).then(async (response) => {
+          const { body: result, structured } = await readApiBody<IntakeAssessment & { error?: string }>(response);
+          if (!response.ok) throw new ApiFailure(apiError(response.status, result, locale), response.status, structured);
+          return result;
+        }).catch((caught: unknown) => {
+          // Role test buttons keep working when the assistant API is unreachable.
+          if (!demoFallbackApplies(accessToken, caught)) throw caught;
+          return demoAssessment(locale, content, nextMessages, assessment);
+        });
+        const selectedService = inferService(nextMessages);
+        const displayAssessment = selectedService === "repair" ? body : { ...body, category: categoryByService[selectedService] };
+        setAssessment(displayAssessment);
+        setMessages([...nextMessages, { role: "assistant", content: displayAssessment.reply, locale: displayAssessment.locale }]);
+        setSelectedIssueIds(displayAssessment.issueCandidates.filter((candidate) => candidate.likelihood !== "low").map((candidate) => candidate.id));
         setSkipQuestionIds([]);
         setSkipAcknowledged(false);
         setShowAllIssues(false);
@@ -496,20 +506,30 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
     event.preventDefault();
     if (!assessment?.assessmentToken) return;
     const form = new FormData(event.currentTarget);
+    const scopeDetails = {
+      ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}),
+      ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}),
+      ...(assessment.category === "cleaning" ? { serviceAnswers: cleaningAnswers, cleaningAddOns: selectedCleaningAddOns, estimatedRange: cleaningEstimate } : {}),
+    };
     setConfirming(true);
     setError("");
     try {
       let pending = pendingMediaRequest;
       if (!pending) {
-        const response = await fetch("/api/intake/confirm", {
+        const requestId = await fetch("/api/intake/confirm", {
           method: "POST",
           headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), scopeDetails: { ...(String(form.get("accessNotes") ?? "").trim() ? { access: String(form.get("accessNotes")).trim() } : {}), ...(String(form.get("pets") ?? "").trim() ? { pets: String(form.get("pets")).trim() } : {}), ...(assessment.category === "cleaning" ? { serviceAnswers: cleaningAnswers, cleaningAddOns: selectedCleaningAddOns, estimatedRange: cleaningEstimate } : {}) } }),
+          body: JSON.stringify({ assessmentToken: assessment.assessmentToken, acceptedIssueIds: selectedIssueIds, warningAcknowledged: uncertaintyAcknowledged, customerName: form.get("customerName"), address: form.get("address"), ...(Object.keys(scopeDetails).length > 0 ? { scopeDetails } : {}) }),
           signal: AbortSignal.timeout(30_000),
+        }).then(async (response) => {
+          const { body, structured } = await readApiBody<{ requestId?: string; error?: string }>(response);
+          if (!response.ok || !body.requestId) throw new ApiFailure(apiError(response.status, body, locale), response.status, structured);
+          return body.requestId;
+        }).catch((caught: unknown) => {
+          if (!demoFallbackApplies(accessToken, caught)) throw caught;
+          return demoRequestId();
         });
-        const body = await response.json().catch(() => ({})) as { requestId?: string; error?: string };
-        if (!response.ok || !body.requestId) throw new Error(apiError(response.status, body, locale));
-        pending = { requestId: body.requestId, assessmentToken: assessment.assessmentToken };
+        pending = { requestId, assessmentToken: assessment.assessmentToken };
         setPendingMediaRequest(pending);
       }
       const finish = async () => {
@@ -518,9 +538,13 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
           const upload = new FormData();
           upload.append("assessmentToken", pending.assessmentToken);
           files.forEach((file) => upload.append("media", file, file.name));
-          const uploadResponse = await fetch(`/api/requests/${pending.requestId}/intake-media`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: upload, signal: AbortSignal.timeout(120_000) });
-          const uploadBody = await uploadResponse.json().catch(() => ({})) as { error?: string };
-          if (!uploadResponse.ok) throw new Error(apiError(uploadResponse.status, uploadBody, locale));
+          await fetch(`/api/requests/${pending.requestId}/intake-media`, { method: "POST", headers: { Authorization: `Bearer ${accessToken}` }, body: upload, signal: AbortSignal.timeout(120_000) }).then(async (uploadResponse) => {
+            const { body: uploadBody, structured } = await readApiBody<{ error?: string }>(uploadResponse);
+            if (!uploadResponse.ok) throw new ApiFailure(apiError(uploadResponse.status, uploadBody, locale), uploadResponse.status, structured);
+          }).catch((caught: unknown) => {
+            // A local demo walkthrough keeps the attachments client-side only.
+            if (!demoFallbackApplies(accessToken, caught)) throw caught;
+          });
         }
         sessionStorage.removeItem(storageKey);
         setPendingMediaRequest(null);
