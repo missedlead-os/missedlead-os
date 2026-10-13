@@ -5,7 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CloseIcon, PaperclipIcon, PhotoIcon, SendIcon } from "./ChatIcons";
-import { ApplianceIcon, CameraIcon, ClipboardIcon, EmptyBoxIcon, HouseIcon, PlusIcon, StarIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
+import { ApplianceIcon, ClipboardIcon, EmptyBoxIcon, HouseIcon, PlusIcon, StarIcon, WarningIcon, WrenchIcon, type IconComponent } from "../icons";
 
 import { categoryIcon, categoryLabel, issueIcon } from "../issueIcon";
 import { ApiFailure, demoFallbackApplies, demoRequestId, readApiBody } from "../demo";
@@ -17,6 +17,14 @@ type PendingMediaRequest = { requestId: string; assessmentToken: string };
 type ServiceId = "repair" | "cleaning" | "removal" | "outdoor" | "install" | "bundle";
 
 const serviceIcons: Record<ServiceId, IconComponent> = { repair: WrenchIcon, cleaning: StarIcon, removal: EmptyBoxIcon, outdoor: HouseIcon, install: ApplianceIcon, bundle: ClipboardIcon };
+const serviceImages: Record<ServiceId, string> = {
+  repair: "/img/services/repair.webp",
+  cleaning: "/img/services/cleaning.webp",
+  removal: "/img/services/removal.webp",
+  outdoor: "/img/services/outdoor.webp",
+  install: "/img/services/install.webp",
+  bundle: "/img/services/bundle.webp",
+};
 const charlotteStreets = [
   "Central Ave, Charlotte, NC 28204", "Commonwealth Ave, Charlotte, NC 28205", "The Plaza, Charlotte, NC 28205", "South Blvd, Charlotte, NC 28203", "East Blvd, Charlotte, NC 28203", "Park Rd, Charlotte, NC 28209", "Providence Rd, Charlotte, NC 28211", "Monroe Rd, Charlotte, NC 28205", "Sharon Rd, Charlotte, NC 28210", "Tryon St, Charlotte, NC 28202",
 ];
@@ -129,7 +137,6 @@ type Copy = {
   remove: string;
   heroTitle: string;
   heroSub: string;
-  photoCta: string;
   tilesLabel: string;
   tiles: { id: ServiceId; label: string; description: string; message: string }[];
   bundleTitle: string;
@@ -155,7 +162,7 @@ const copy: Record<IntakeLocale, Copy> = {
   en: {
     title: "What do you need help with?",
     subtitle: "Repair, clean, remove, install, or bundle small jobs into one visit.",
-    greeting: "Hi, I’m the WeCover home service assistant. Choose a service below or describe what you need. You can add photos, a short video, or a voice note too.",
+    greeting: "Hi, I’m the WeCover home service assistant. Choose a service first. Then tell us what you need and add photos, a short video, or a voice note if helpful.",
     placeholder: "Describe the service you need",
     composerLabel: "Describe the service or answer the question",
     attach: "Add photos, video, or audio",
@@ -189,10 +196,9 @@ const copy: Record<IntakeLocale, Copy> = {
     saveTranslation: "Save translation and continue",
     reattach: "For your privacy, attached files were not saved in this browser. Add them again before continuing.",
     remove: "Remove",
-    heroTitle: "One place for the work around your home.",
-    heroSub: "Tell us what you need, add photos if helpful, and we’ll prepare the right service request.",
-    photoCta: "Take or upload a photo",
-    tilesLabel: "Choose a service",
+    heroTitle: "First, choose the kind of help you need.",
+    heroSub: "Then you can add photos for that service. A room photo alone cannot tell us whether you want cleaning, repair, removal, or installation.",
+    tilesLabel: "Choose a service to continue",
     tiles: [
       { id: "repair", label: "Repair", description: "Plumbing, HVAC, electrical, and fixes", message: "I need a home repair. Please ask what is wrong, where it is, and any safety questions needed." },
       { id: "cleaning", label: "Cleaning", description: "Deep, move-out, and home cleaning", message: "I need a cleaning service. Please ask what areas need cleaning, the type of cleaning, and the approximate size." },
@@ -222,7 +228,7 @@ const copy: Record<IntakeLocale, Copy> = {
   es: {
     title: "¿Con qué necesita ayuda?",
     subtitle: "Repare, limpie, retire, instale o agrupe trabajos pequeños en una sola visita.",
-    greeting: "Hola, soy el asistente de servicios para el hogar de WeCover. Elija un servicio o describa lo que necesita. También puede adjuntar fotos, un video corto o una nota de voz.",
+    greeting: "Hola, soy el asistente de servicios para el hogar de WeCover. Primero elija un servicio. Después describa lo que necesita y añada fotos, un video corto o una nota de voz si le ayuda.",
     placeholder: "Describa el servicio que necesita",
     composerLabel: "Describa el servicio o responda la pregunta",
     attach: "Agregar fotos, video o audio",
@@ -256,10 +262,9 @@ const copy: Record<IntakeLocale, Copy> = {
     saveTranslation: "Guardar traducción y continuar",
     reattach: "Por su privacidad, los archivos adjuntos no se guardaron en este navegador. Agréguelos de nuevo antes de continuar.",
     remove: "Eliminar",
-    heroTitle: "Un solo lugar para los trabajos de su hogar.",
-    heroSub: "Cuéntenos qué necesita, añada fotos si ayudan y prepararemos la solicitud adecuada.",
-    photoCta: "Tome o suba una foto",
-    tilesLabel: "Elija un servicio",
+    heroTitle: "Primero, elija el tipo de ayuda que necesita.",
+    heroSub: "Después podrá añadir fotos para ese servicio. Una foto de una habitación no indica si necesita limpieza, reparación, retiro o instalación.",
+    tilesLabel: "Elija un servicio para continuar",
     tiles: [
       { id: "repair", label: "Reparación", description: "Plomería, climatización, electricidad y arreglos", message: "Necesito una reparación en casa. Pregúnteme qué falla, dónde está y las preguntas de seguridad necesarias." },
       { id: "cleaning", label: "Limpieza", description: "Limpieza profunda, de mudanza y del hogar", message: "Necesito un servicio de limpieza. Pregúnteme qué áreas, el tipo de limpieza y el tamaño aproximado." },
@@ -578,11 +583,9 @@ export function ChatIntake({ accessToken, onCreated, onLocaleChange, initialLoca
       <div className="chat-message chat-message--assistant"><span className="chat-message__sender">WeCover</span><p>{text.greeting}</p></div>
       {messages.length === 0 && !assessment && <>
         <div className="intake-hero">
-          <div className="intake-hero__body"><h2>{text.heroTitle}</h2><p>{text.heroSub}</p>
-            <label className="intake-hero__cta"><CameraIcon size={18}/>{text.photoCta}<input type="file" accept={fileAccept} multiple onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }}/></label>
-          </div>
+          <div className="intake-hero__body"><h2>{text.heroTitle}</h2><p>{text.heroSub}</p></div>
         </div>
-        {!bundleOpen ? <div className="service-picker"><span className="service-picker__label">{text.tilesLabel}</span><div className="service-grid">{text.tiles.map((tile) => { const TileIcon = serviceIcons[tile.id]; return <button type="button" key={tile.id} className={tile.id === "bundle" ? "service-card service-card--bundle" : "service-card"} onClick={() => tile.id === "bundle" ? setBundleOpen(true) : void runAnalysis(tile.message, skipQuestionIds, true)}><span className="service-card__icon"><TileIcon size={22}/></span><span><strong>{tile.label}</strong><small>{tile.description}</small></span>{tile.id === "bundle" && <span className="service-card__badge">{locale === "es" ? "UNA VISITA" : "ONE VISIT"}</span>}</button>; })}</div></div> : <section className="bundle-builder" aria-labelledby="bundle-title"><button type="button" className="bundle-builder__back" onClick={() => setBundleOpen(false)}>← {text.bundleBack}</button><div className="bundle-builder__heading"><span className="service-card__icon"><ClipboardIcon size={22}/></span><div><h2 id="bundle-title">{text.bundleTitle}</h2><p>{text.bundleHelp}</p></div></div><div className="bundle-task-grid">{text.bundleTasks.map((task) => <label key={task} className={bundleTasks.includes(task) ? "selected" : ""}><input type="checkbox" checked={bundleTasks.includes(task)} onChange={() => toggleBundleTask(task)}/><span>{task}</span></label>)}</div><label className="bundle-builder__custom"><span>{text.bundleCustom}</span><input value={bundleCustom} onChange={(event) => setBundleCustom(event.target.value)} placeholder={locale === "es" ? "Ej.: cambiar dos pomos" : "Example: Replace two doorknobs"}/></label><button type="button" className="primary bundle-builder__submit" disabled={!bundleTasks.length && !bundleCustom.trim()} onClick={submitBundle}><PlusIcon size={18}/>{text.bundleStart}</button></section>}
+        {!bundleOpen ? <div className="service-picker"><span className="service-picker__label">{text.tilesLabel}</span><div className="service-grid">{text.tiles.map((tile) => { const TileIcon = serviceIcons[tile.id]; return <button type="button" key={tile.id} className={tile.id === "bundle" ? "service-card service-card--bundle" : "service-card"} onClick={() => tile.id === "bundle" ? setBundleOpen(true) : void runAnalysis(tile.message, skipQuestionIds, true)}><img className="service-card__image" src={serviceImages[tile.id]} alt=""/><span className="service-card__icon"><TileIcon size={22}/></span><span className="service-card__copy"><strong>{tile.label}</strong><small>{tile.description}</small></span>{tile.id === "bundle" && <span className="service-card__badge">{locale === "es" ? "UNA VISITA" : "ONE VISIT"}</span>}</button>; })}</div></div> : <section className="bundle-builder" aria-labelledby="bundle-title"><button type="button" className="bundle-builder__back" onClick={() => setBundleOpen(false)}>← {text.bundleBack}</button><div className="bundle-builder__heading"><span className="service-card__icon"><ClipboardIcon size={22}/></span><div><h2 id="bundle-title">{text.bundleTitle}</h2><p>{text.bundleHelp}</p></div></div><div className="bundle-task-grid">{text.bundleTasks.map((task) => <label key={task} className={bundleTasks.includes(task) ? "selected" : ""}><input type="checkbox" checked={bundleTasks.includes(task)} onChange={() => toggleBundleTask(task)}/><span>{task}</span></label>)}</div><label className="bundle-builder__custom"><span>{text.bundleCustom}</span><input value={bundleCustom} onChange={(event) => setBundleCustom(event.target.value)} placeholder={locale === "es" ? "Ej.: cambiar dos pomos" : "Example: Replace two doorknobs"}/></label><button type="button" className="primary bundle-builder__submit" disabled={!bundleTasks.length && !bundleCustom.trim()} onClick={submitBundle}><PlusIcon size={18}/>{text.bundleStart}</button></section>}
       </>}
       {messages.map((message, index) => {
         if (message.hidden) return null;
