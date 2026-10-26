@@ -13,19 +13,21 @@ services:
     # NODE_ENV=production is set at runtime, but the TypeScript/Vite build
     # needs the checked-in dev toolchain (typescript, vite, and their types).
     buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm build
-    startCommand: pnpm start:api
+    startCommand: pnpm check:runtime && pnpm start:api
     healthCheckPath: /api/capabilities
     envVars:
       - key: NODE_ENV
         value: production
       - key: NODE_VERSION
-        value: "22"
+        value: "24"
       - key: SERVE_STATIC
         value: "1"
       - key: PAYMENTS_ENABLED
         value: "false"
+      - key: PAYMENTS_MODE
+        value: disabled
       - key: DEMO_MODE
-        value: "true"
+        value: "false"
       - key: SESSION_SECRET
         generateValue: true
       - key: SUPABASE_URL

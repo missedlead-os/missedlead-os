@@ -55,6 +55,8 @@ pnpm exec supabase test db supabase/tests/delayed_matching.sql
 
 ## 검증
 
+최신 로컬 출시 준비 결과, 권한 수정 및 남은 출시 차단 요인은 [2026-10-04 출시 준비 기록](docs/RELEASE_READINESS_20261004.md)을 확인하세요. 배포 호스트에서 `pnpm check:runtime`으로 Node 24 이상과 ffmpeg/ffprobe를 먼저 확인합니다. 공개 데모 API는 운영자 세션을 발급하지 않으며 운영 배포의 데모·결제는 기본 비활성화입니다.
+
 ```bash
 pnpm test
 pnpm lint

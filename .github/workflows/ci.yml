@@ -11,17 +11,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # pnpm 버전은 package.json의 packageManager에서 읽는다.
+      # 여기서 version을 함께 지정하면 ERR_PNPM_BAD_PM_VERSION으로 설정 단계가 실패한다.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
+      # server/intake/media.ts의 정제 경로와 해당 테스트는 ffmpeg/ffprobe를 실제로 실행한다.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pnpm check:runtime
       - run: pnpm test
       - run: pnpm test:mobile
       - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      # Deterministic browser contract lane; no live Auth, Gemini, or payment calls.
+      - run: pnpm exec playwright test
       - run: pnpm --dir mobile install --frozen-lockfile
       - run: pnpm --dir mobile typecheck
