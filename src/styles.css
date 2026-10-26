@@ -1021,7 +1021,8 @@ details.safety-collapsible { display: block; }
   .app-shell--intake .topbar:has(.session button + button) .brand span { margin-right: 0; font-size: 1rem; }
   .app-shell--intake .topbar:has(.session button + button) .session button { padding: .5rem .58rem; font-size: .72rem; }
   .intake-main { height: calc(100svh - 56px); padding: 0; }
-  .chat-intake { min-height: 0; border-width: 1px 0 0; border-radius: 0; box-shadow: none; }
+  /* Keep the conversation usable when the header and media consent fill a short viewport. */
+  .chat-intake { min-height: 0; grid-template-rows: auto auto auto minmax(12rem, 1fr) auto auto; overflow-y: auto; border-width: 1px 0 0; border-radius: 0; box-shadow: none; }
   .chat-intake__header { gap: 14px; padding: 16px 16px 13px; }
   .chat-intake__header h1 { font-size: 1.7rem; }
   .chat-intake__header > div > p:last-child { font-size: .82rem; }
