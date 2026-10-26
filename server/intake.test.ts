@@ -76,24 +76,24 @@ describe("chat intake", () => {
   it("refuses to scope work WeCover does not perform, even when the model accepts it", async () => {
     const provider = new FakeIntakeProvider();
     provider.next = {
-      reply: "I can help with carpet cleaning. How many rooms need cleaning?",
+      reply: "I can help with moving. How many rooms need packing?",
       category: "handyman",
-      summary: "User needs carpet cleaning and movers for the apartment.",
-      issueCandidates: [{ id: "carpet_cleaning", label: "Carpet cleaning service", likelihood: "medium", reason: "Customer asked for carpet cleaning", evidenceNeeded: [] }],
+      summary: "User needs movers to pack and move the apartment.",
+      issueCandidates: [{ id: "moving", label: "Moving and packing service", likelihood: "medium", reason: "Customer asked for movers", evidenceNeeded: [] }],
       questions: [],
       details: {},
       safety: { level: "normal", hazards: [], guidance: "" },
-      materialsHint: ["carpet extractor"],
+      materialsHint: ["moving boxes"],
       readyToConfirm: true,
     };
     const { app } = setup(provider);
-    const analyzed = await analyze(app, { locale: "en", history: [{ role: "user", content: "I need movers and someone to clean the carpets" }] }).expect(200);
+    const analyzed = await analyze(app, { locale: "en", history: [{ role: "user", content: "I need movers to pack and move my apartment" }] }).expect(200);
     expect(analyzed.body.issueCandidates).toEqual([]);
     expect(analyzed.body.questions).toEqual([]);
     expect(analyzed.body.readyToConfirm).toBe(false);
     expect(analyzed.body.reply).not.toContain("I can help");
     await request(app).post("/api/intake/confirm").set(bearer("customer"))
-      .send({ assessmentToken: analyzed.body.assessmentToken, customerName: "Alex", address: "Charlotte, NC", acceptedIssueIds: ["carpet_cleaning"], warningAcknowledged: true })
+      .send({ assessmentToken: analyzed.body.assessmentToken, customerName: "Alex", address: "Charlotte, NC", acceptedIssueIds: ["moving"], warningAcknowledged: true })
       .expect(409, { error: "assessment_not_ready" });
   });
 
