@@ -23,6 +23,17 @@ test('request status displays localized customer language', () => {
   assert.equal(requestStatus('unknown', 'es'), 'Solicitud en revisión');
 });
 
+test('availability rejects rolled-over dates while accepting a real leap day', () => {
+  const nextMonth = [{ id: 'march', ranking: { earliestStartAt: '2027-03-01T12:00:00', languages: ['en'] } }];
+  for (const deadline of ['2027-02-29', '2027-02-30']) assert.deepEqual(filterQuotes(nextMonth, '', deadline), []);
+  const leapDay = [
+    { id: 'first', ranking: { earliestStartAt: '2028-02-29T13:00:00', languages: ['en'] } },
+    { id: 'second', ranking: { earliestStartAt: '2028-02-29T12:00:00', languages: ['en'] } },
+    { id: 'later', ranking: { earliestStartAt: '2028-03-01T00:00:00', languages: ['en'] } },
+  ];
+  assert.deepEqual(filterQuotes(leapDay, '', '2028-02-29').map(q => q.id), ['first', 'second']);
+});
+
 const evidence = (id, kind) => ({
   id,
   requestId: 'request',

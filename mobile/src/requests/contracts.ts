@@ -53,7 +53,13 @@ export function canAcknowledgeCompletion(activity: ActivityData): boolean {
 }
 export const money = (cents: number, locale: Locale) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' }).format(cents / 100);
 export function filterQuotes(quotes: readonly Quote[], language: string, before: string): Quote[] {
-  const deadline = before ? Date.parse(`${before}T23:59:59`) : Infinity;
+  let deadline = Infinity;
+  if (before) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(before)) return [];
+    const date = new Date(`${before}T23:59:59`);
+    if (!Number.isFinite(date.getTime()) || date.getFullYear() !== Number(before.slice(0, 4)) || date.getMonth() + 1 !== Number(before.slice(5, 7)) || date.getDate() !== Number(before.slice(8, 10))) return [];
+    deadline = date.getTime();
+  }
   return quotes.filter((q) => (!language || q.ranking.languages?.some((value) => value.toLowerCase() === language || (language === 'en' && value.toLowerCase() === 'english') || (language === 'es' && ['spanish', 'español'].includes(value.toLowerCase())))) && Date.parse(q.ranking.earliestStartAt) <= deadline);
 }
 export function requestStatus(status: string, locale: Locale): string {

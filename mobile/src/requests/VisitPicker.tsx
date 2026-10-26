@@ -17,6 +17,6 @@ export function VisitPicker({ locale, busy, onPropose }: { readonly locale: Loca
     <View style={styles.row}><Action label={t('Choose day', 'Elegir día')} onPress={() => setMode('date')} /><Action label={t('Choose time', 'Elegir hora')} onPress={() => setMode('time')} /></View>
     {mode && <DateTimePicker value={date} mode={mode} minimumDate={mode === 'date' ? new Date() : undefined} display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(event, next) => { if (Platform.OS !== 'ios') setMode(undefined); if (event.type !== 'dismissed' && next) setDate(next); }} />}
     {mode && Platform.OS === 'ios' && <Action label={t('Done', 'Listo')} onPress={() => setMode(undefined)} />}
-    <Action label={t('Propose visit', 'Proponer visita')} disabled={busy || date.getTime() <= Date.now()} onPress={() => onPropose(date)} />
+    <Action label={t('Propose visit', 'Proponer visita')} disabled={busy || !Number.isFinite(date.getTime()) || date.getTime() <= Date.now()} onPress={() => { if (!busy && Number.isFinite(date.getTime()) && date.getTime() > Date.now()) onPropose(date); }} />
   </View>;
 }
