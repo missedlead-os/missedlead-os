@@ -68,8 +68,8 @@ const personas: readonly Persona[] = [
     "Also who do you think wins the game tonight?",
   ] },
   { id: "offscope_moving", locale: "en", inScope: false, turns: [
-    "I need movers to pack my apartment and a cleaner for the carpets next week.",
-    "Do you also do lawn mowing and gutter cleaning subscriptions?",
+    "I need movers to pack my apartment and transport everything next week.",
+    "Can the moving crew bring boxes and a truck?",
   ] },
   { id: "offscope_device", locale: "en", inScope: false, turns: [
     "My laptop screen is cracked and my phone battery dies fast. Can someone come repair them?",
@@ -94,7 +94,7 @@ const personas: readonly Persona[] = [
 const offScopeSignals = [
   /\bmechanic\b/i, /\bauto (repair|shop)\b/i, /\battorney\b/i, /\blawyer\b/i, /\btax(es| return| advice| preparer)\b/i,
   /\bmov(ers|ing|e)\b/i, /\bpack(ing)?\b/i, /\bpizza\b/i, /\bweather\b/i, /\bmortgage\b/i, /\binsurance\b/i,
-  /\blaptop\b/i, /\bphone\b/i, /\bcarpet cleaning\b/i, /\blawn\b/i, /\bmow/i, /\bgutter\b/i, /\bwarranty\b/i,
+  /\blaptop\b/i, /\bphone\b/i, /\bwarranty\b/i,
 ];
 
 /** "I can help with X", "I can assist with scheduling X" 처럼 수락한 문장만 추출한다. */

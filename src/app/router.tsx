@@ -45,7 +45,7 @@ export function RoleRouter({ auth, render }: { auth: AuthValue; render: (role: R
 
 function AuthGate({ auth }: { auth: AuthValue }) {
   const { signIn } = auth;
-  const [message, setMessage] = useState("Enter your email and we’ll send you a secure sign-in link.");
+  const [message, setMessage] = useState("Enter your email to continue your request and connect with local pros.");
   const enterDemo = (role: Role) => {
     void auth.quickDemoLogin?.(role).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Demo access is unavailable."));
   };
@@ -56,8 +56,8 @@ function AuthGate({ auth }: { auth: AuthValue }) {
       <div className="auth-scene__caption"><strong>Charlotte pilot</strong><span>Licensed pros · county permits verified · deposit protection</span></div>
     </aside>
     <section className="panel auth-card">
-      <p className="eyebrow">WECOVER HOME REPAIR</p>
-      <h1>Sign in to save<br/><em>your repair request.</em></h1>
+      <p className="eyebrow">WECOVER HOME SERVICES</p>
+      <h1>Sign in to save<br/><em>your service request.</em></h1>
       <p>{message}</p>
       <form onSubmit={(event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const email = form.get("email")?.toString() ?? ""; const password = form.get("password")?.toString() ?? ""; void signIn(email, password || undefined).then(() => setMessage(password ? "Signing you in…" : "Check your email for the sign-in link.")).catch((error: unknown) => setMessage(error instanceof Error ? error.message : "Sign-in request failed.")); }}>
         <label>Email address<input name="email" type="email" required autoComplete="email" /></label>
@@ -75,7 +75,7 @@ function AuthGate({ auth }: { auth: AuthValue }) {
         <span>Use a role workspace instantly while developing. These buttons are disabled outside local/demo builds.</span>
         <div className="demo-actors__actions">
           <button key="customer" type="button" data-testid="demo-customer" onClick={() => enterDemo("customer")}>
-            <b>Customer</b><small>New repair intake</small>
+            <b>Customer</b><small>New home service request</small>
           </button>
           <button key="provider" type="button" data-testid="demo-provider" onClick={() => enterDemo("provider")}>
             <b>Provider</b><small>Jobs and quotes</small>

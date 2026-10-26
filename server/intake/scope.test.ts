@@ -16,19 +16,15 @@ const assessment = (overrides: Partial<ModelAssessment> = {}): ModelAssessment =
 });
 
 describe("intake service scope", () => {
-  // 아래 두 문장은 실제 인테이크 모델이 반환해 접수 직전까지 갔던 기록이다.
   it("blocks work WeCover does not perform", () => {
     for (const subject of [
-      "User needs carpet cleaning and moving services. Moving services are out of scope. Carpet cleaning is a service request.",
-      "User is inquiring about recurring lawn mowing and gutter cleaning services.",
-      "Recurring lawn mowing and landscaping subscription.",
       "Movers to pack the apartment next week.",
       "Car engine knocking and check engine light on.",
       "Cracked laptop screen and phone battery replacement.",
       "Help filing income taxes and a lease dispute letter.",
       "Sell a home warranty and file the insurance claim.",
       "Weather forecast and restaurant recommendation request.",
-      "Solicita servicio de limpieza de alfombras y mudanza.",
+      "Solicita una empresa de mudanza para empacar el apartamento.",
     ]) expect(isNonServiceableSubject(subject), subject).toBe(true);
   });
 
@@ -43,26 +39,37 @@ describe("intake service scope", () => {
       "Bedroom door will not latch and the hinge screws back out.",
       "Fuga debajo del fregadero de la cocina.",
       "The tenant's lease dispute is unrelated; the toilet runs constantly.",
+      "Deep cleaning for a three-bedroom home with carpet shampoo.",
+      "Tree removal and landscaping in the back yard.",
+      "Install shelves and assemble two pieces of furniture.",
     ]) expect(isNonServiceableSubject(subject), subject).toBe(false);
   });
 
   it("removes the request path for out-of-scope work instead of scoping it", () => {
-    const result = enforceServiceScope(assessment(), "en");
+    const result = enforceServiceScope(assessment({
+      summary: "Movers to pack the apartment next week.",
+      issueCandidates: [{ id: "moving", label: "Moving and packing service", likelihood: "medium", reason: "Customer requested movers.", evidenceNeeded: [] }],
+    }), "en");
     expect(result.issueCandidates).toEqual([]);
     expect(result.questions).toEqual([]);
     expect(result.materialsHint).toEqual([]);
     expect(result.readyToConfirm).toBe(false);
-    expect(result.reply).toContain("home repair");
+    expect(result.reply).toContain("outside WeCover's home services");
     expect(result.reply).not.toContain("I can help");
   });
 
   it("answers an out-of-scope request in the requested locale", () => {
-    expect(enforceServiceScope(assessment(), "es").reply).toContain("reparación del hogar");
+    expect(enforceServiceScope(assessment({
+      summary: "Empresa de mudanza para empacar.",
+      issueCandidates: [{ id: "mudanza", label: "Servicio de mudanza", likelihood: "medium", reason: "Solicita empacar el apartamento.", evidenceNeeded: [] }],
+    }), "es").reply).toContain("fuera de los servicios");
   });
 
   it("never replaces emergency guidance with the scope notice", () => {
     const emergency = enforceServiceScope(assessment({
       reply: "Leave the area and call 911.",
+      summary: "Movers are packing the apartment during an active fire.",
+      issueCandidates: [{ id: "moving", label: "Moving service", likelihood: "medium", reason: "Customer requested movers.", evidenceNeeded: [] }],
       safety: { level: "emergency", hazards: ["fire"], guidance: "Leave now." },
     }), "en");
     expect(emergency.reply).toBe("Leave the area and call 911.");
