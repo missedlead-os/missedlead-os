@@ -41,6 +41,10 @@ export const modelAssessmentSchema = z.object({
     dimensions: z.string().trim().min(1).max(120).optional(),
     access: z.string().trim().min(1).max(240).optional(),
     desiredTime: z.string().datetime().optional(),
+    desiredTimeLabel: z.string().trim().min(1).max(120).optional(),
+    visitDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    visitTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),
+    visitWindow: z.enum(["morning", "afternoon", "evening"]).optional(),
   }).default({}),
   safety: z.object({
     level: safetyLevelSchema,
@@ -75,6 +79,8 @@ export type AnalyzeInput = {
   readonly media: readonly IntakeMedia[];
   readonly skippedQuestionIds: readonly string[];
   readonly skippedQuestions: readonly { readonly id: string; readonly prompt: string }[];
+  /** 현재 시각. 모델이 "토요일 오전" 같은 상대 표현을 날짜로 바꾸는 데 쓴다. */
+  readonly now?: Date;
 };
 
 export interface IntakeProvider {

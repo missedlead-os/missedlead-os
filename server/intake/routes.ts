@@ -14,6 +14,7 @@ import { IntakeProviderResponseError, IntakeProviderUnavailableError, normalizeM
 import { MediaSanitizationError, sanitizeMediaBuffer } from "./media.js";
 import { enforceSafetyFloor } from "./safety.js";
 import { enforceServiceScope } from "./scope.js";
+import { applyVisitPreference, VISIT_TIME_ZONE } from "./visitTime.js";
 import { AssessmentTokenSigner, InvalidAssessmentTokenError } from "./token.js";
 import { localeSchema, translationRecordSchema, type IntakeMedia, type SignedAssessment } from "./types.js";
 import type { IntakeUsageBudget } from "./usage.js";
@@ -36,7 +37,7 @@ const confirmSchema = z.object({
   address: z.string().trim().min(3).max(500),
   acceptedIssueIds: z.array(z.string().min(1)).min(1).max(5),
   warningAcknowledged: z.literal(true),
-  scopeDetails: z.object({ location: z.string().max(300).optional(), dimensions: z.string().max(300).optional(), access: z.string().max(500).optional(), pets: z.string().max(300).optional(), desiredTime: z.string().max(120).optional(), exclusions: z.array(z.string().max(300)).max(10).optional() }).optional(),
+  scopeDetails: z.object({ location: z.string().max(300).optional(), dimensions: z.string().max(300).optional(), access: z.string().max(500).optional(), pets: z.string().max(300).optional(), exclusions: z.array(z.string().max(300)).max(10).optional() }).optional(),
 });
 const translateSchema = z.object({
   text: z.string().trim().min(1).max(4_000),
@@ -205,7 +206,7 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const skippedQuestions = [...(previous?.skippedQuestions ?? []), ...currentSkippedQuestions].filter((question, index, values) => values.findIndex((candidate) => candidate.id === question.id) === index);
     const suspicious = payload.history.filter((message) => message.role === "user" && INJECTION_PATTERNS.some((pattern) => pattern.test(message.content)));
     if (suspicious.length) console.warn("intake possible prompt injection", { actorId: actor(response).id, matches: suspicious.length, sample: suspicious[0]?.content.slice(0, 120) });
-    const rawAssessment = normalizeModelAssessment(await provider.analyze({ locale: payload.locale, history: payload.history, media, skippedQuestionIds: skippedIds, skippedQuestions }), "unknown", skippedIds);
+    const rawAssessment = applyVisitPreference(normalizeModelAssessment(await provider.analyze({ locale: payload.locale, history: payload.history, media, skippedQuestionIds: skippedIds, skippedQuestions, now: options.now() }), "unknown", skippedIds), options.now(), payload.locale, skippedIds);
     const safetyAssessment = enforceServiceScope(enforceSafetyFloor(rawAssessment, payload.history, payload.locale), payload.locale);
     const remainingQuestions = safetyAssessment.questions.filter((question) => question.requiredForSafety || !skippedIds.includes(question.id));
     // 모델이 같은 질문을 말만 바꿔 다시 묻는 패턴 방지 — 이전 턴의 질문/같은 응답 내 질문과 토큰이 크게 겹치면 제거
@@ -268,17 +269,37 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     const issues = signed.assessment.issueCandidates.filter((issue) => accepted.has(issue.id));
     if (issues.length !== accepted.size) return response.status(422).json({ error: "unknown_issue" });
     if (options.beforeConfirm) await options.beforeConfirm(request, input.data.address);
+    // 방문 희망 시간: 분석 후 시간이 지났을 수 있으므로 확정 시점에 다시 검증한다.
+    const desiredAt = signed.assessment.details.desiredTime;
+    const desiredValid = Boolean(desiredAt) && new Date(desiredAt as string).getTime() > options.now().getTime();
+    const { desiredTime: _staleDesired, desiredTimeLabel: _staleLabel, ...detailsWithoutVisit } = signed.assessment.details;
+    const visitDetails = desiredValid ? { desiredTime: desiredAt, ...(signed.assessment.details.desiredTimeLabel ? { desiredTimeLabel: signed.assessment.details.desiredTimeLabel } : {}) } : {};
     const confidence = Math.max(...issues.map((issue) => ({ low: 0.35, medium: 0.6, high: 0.8 })[issue.likelihood]));
     const result = await options.repository.execute("confirm_intake", {
       customerName: input.data.customerName, address: input.data.address,
       description: signed.assessment.summary, category: signed.assessment.category,
-      workScope: { symptom: signed.assessment.summary, ...signed.assessment.details, photos: [], exclusions: [], ...(signed.assessment.materialsHint.length ? { materialsHint: signed.assessment.materialsHint } : {}), ...input.data.scopeDetails, skippedQuestionIds: signed.skippedQuestionIds, conversationTranscript: signed.history },
+      workScope: { symptom: signed.assessment.summary, ...detailsWithoutVisit, ...visitDetails, photos: [], exclusions: [], ...(signed.assessment.materialsHint.length ? { materialsHint: signed.assessment.materialsHint } : {}), ...input.data.scopeDetails, skippedQuestionIds: signed.skippedQuestionIds, conversationTranscript: signed.history },
       triage: { category: signed.assessment.category, urgency: signed.assessment.safety.level === "urgent" ? "urgent" : "routine", possibleCauses: issues.map((issue) => issue.label), confidence, questions: signed.assessment.questions.map((question) => question.prompt), hazards: [], attachmentTypes: signed.attachmentTypes, uncertaintyAcknowledged: signed.uncertaintyAcknowledged, locale: signed.locale, translations: signed.translations },
       priceDisclosure: { source: "ai_intake_no_market_sample", sampleCount: 0, updatedAt: options.now().toISOString(), confidence: 0 }, assessmentId: signed.assessmentId,
     }, { actor: actor(response), accessToken: accessToken(request), now: options.now().toISOString() }, () => ({ status: 500, data: { error: "confirm_intake_not_implemented" } }));
     if (result.status < 300 && options.onConfirmed) {
       const saved = z.object({ requestId: z.string().uuid() }).safeParse(result.data);
       if (saved.success) { const updated=await options.onConfirmed(saved.data.requestId); result.data={requestId:saved.data.requestId,...updated}; }
+    }
+    if (result.status < 300 && desiredValid) {
+      // 채팅에서 말한 희망 시간을 '제안(proposed)' 일정으로 저장한다. 확정은 업체/운영자 흐름에서만 가능하며, 실패해도 접수는 유지한다.
+      const saved = z.object({ requestId: z.string().min(1) }).safeParse(result.data);
+      if (saved.success) {
+        const schedule = { startsAt: desiredAt as string, timeZone: VISIT_TIME_ZONE, status: "proposed" as const };
+        try {
+          const stored = await options.repository.execute("schedule_upsert", { ...schedule, request_id: saved.data.requestId }, { actor: actor(response), accessToken: accessToken(request), now: options.now().toISOString() },
+            (state) => ({ status: 200, data: state.schedules[saved.data.requestId] = { requestId: saved.data.requestId, ...schedule } }));
+          if (stored.status < 300) result.data = { ...(result.data as Record<string, unknown>), visit: { ...schedule, ...(signed.assessment.details.desiredTimeLabel ? { label: signed.assessment.details.desiredTimeLabel } : {}) } };
+          else console.warn("intake visit proposal not stored", { status: stored.status });
+        } catch (error) {
+          console.warn("intake visit proposal failed", { message: error instanceof Error ? error.message : "unknown" });
+        }
+      }
     }
     return response.status(result.status).json(result.data);
   });

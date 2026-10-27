@@ -5,6 +5,7 @@ import type { Locale } from './protocol';
 
 export const copy = {
   en: {
+    preferredVisit: 'Preferred visit', visitProposed: 'Proposed visit time (your pro confirms it)',
     conversation_limit: 'This conversation has reached its length limit. Your draft is still here. Copy any details you need, then start a new request.',
     title: 'Your repair assistant', greeting: 'What’s happening in your home? Tell us what you see, hear, or smell. Add photos, a short video, or an audio file when helpful.',
     placeholder: 'What happened?', send: 'Send', camera: 'Take photo', video: 'Record video', library: 'Photos & videos', audio: 'Audio file', remove: 'Remove',
@@ -22,8 +23,10 @@ export const copy = {
     connection_retry: 'Connection interrupted. Your details are still here. Check your connection and try again.',
     intake_daily_quota_exceeded: 'Today’s consultation limit has been reached. Please return tomorrow.', intake_capacity_reached: 'The assistant is busy. Please try again shortly.',
     invalid_assessment_token: 'This consultation has expired. Start a new request to review your details again.', intake_ai_unavailable: 'The assistant is temporarily unavailable. Please try again.',
+    service_zip_unavailable: 'We do not serve that ZIP code yet. WeCover is available in the Charlotte area.',
   },
   es: {
+    preferredVisit: 'Horario preferido', visitProposed: 'Horario de visita propuesto (su técnico lo confirma)',
     conversation_limit: 'Esta conversación alcanzó el límite de extensión. Su borrador sigue aquí. Copie los detalles que necesite e inicie otra solicitud.',
     title: 'Su asistente de reparaciones', greeting: '¿Qué está pasando en su hogar? Cuéntenos qué ve, oye o huele. Puede agregar fotos, un video corto o un archivo de audio.',
     placeholder: '¿Qué pasó?', send: 'Enviar', camera: 'Tomar foto', video: 'Grabar video', library: 'Fotos y videos', audio: 'Archivo de audio', remove: 'Eliminar',

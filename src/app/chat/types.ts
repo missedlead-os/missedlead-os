@@ -35,6 +35,8 @@ export type IntakeAssessment = {
   category?: string;
   materialsHint?: string[];
   uncertaintyWarning?: string;
+  /** Customer-stated preferences the server resolved; the visit time arrives as an ISO instant plus a readable label. */
+  details?: { desiredTime?: string; desiredTimeLabel?: string };
   assessmentToken?: string;
 };
 

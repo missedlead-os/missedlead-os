@@ -59,6 +59,7 @@ export function NativeChat({ accessToken, onSignOut, preferredLocale, onLocaleCh
         {!intake.confirmation ? <AssessmentPanel intake={intake} /> : <View style={styles.section} accessibilityLiveRegion="polite">
           <Text style={styles.heading}>{text.saved}</Text>
           <Text selectable style={styles.muted}>{intake.confirmation.requestId}</Text>
+          {intake.confirmation.visit ? <Text style={styles.body}>{text.visitProposed}: {intake.confirmation.visit.label ?? new Date(intake.confirmation.visit.startsAt).toLocaleString(intake.locale)}</Text> : null}
           <Text style={styles.body}>{intake.confirmation.matchCount > 0 ? `${intake.confirmation.matchCount} ${text.matched}` : text.noMatches}</Text>
           {!intake.uploadComplete ? <View style={styles.warning}><Text style={styles.body}>{text.pendingUpload}</Text><Action label={text.retryUpload} disabled={intake.busy || intake.requiresReattach || (intake.files.length > 0 && !intake.consent)} onPress={() => { void intake.confirm(); }} /></View> : null}
           <Text style={styles.muted}>{text.noPayment}</Text>

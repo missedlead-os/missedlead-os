@@ -14,11 +14,12 @@ export const assessmentSchema = z.object({
   safety: z.object({ level: z.enum(['normal', 'urgent', 'emergency']), guidance: z.string() }),
   references: z.array(referenceSchema).max(5).optional(),
   readyToConfirm: z.boolean(), uncertaintyWarning: z.string().optional(),
+  details: z.object({ desiredTime: z.string().optional(), desiredTimeLabel: z.string().optional() }).optional(),
 });
 export type Assessment = z.infer<typeof assessmentSchema>;
 export const translationSchema = z.object({ original: z.string(), translated: z.string(), sourceLocale: localeSchema, targetLocale: localeSchema, warning: z.string(), translationToken: z.string().min(1) });
 export type Translation = z.infer<typeof translationSchema>;
-export const confirmationSchema = z.object({ requestId: z.string().min(1), status: z.string(), matchCount: z.number().int().nonnegative() });
+export const confirmationSchema = z.object({ requestId: z.string().min(1), status: z.string(), matchCount: z.number().int().nonnegative(), visit: z.object({ startsAt: z.string(), timeZone: z.string(), status: z.string(), label: z.string().optional() }).optional() });
 export type Confirmation = z.infer<typeof confirmationSchema>;
 export const uploadSchema = z.object({ media: z.array(z.object({ id: z.string(), fileName: z.string() })) });
 export type Attachment = { readonly uri: string; readonly name: string; readonly mimeType: string; readonly size: number };

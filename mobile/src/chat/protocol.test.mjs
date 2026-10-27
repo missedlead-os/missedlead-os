@@ -93,3 +93,12 @@ test('unavailable safety preflight defers to authenticated analysis without inve
   assert.equal(result, assessment);
   assert.equal(analysisCalls, 1);
 });
+
+test('keeps the stated visit preference and the proposed visit from the server', () => {
+  const analysis = { reply: 'Saturday morning noted', locale: 'en', assessmentToken: 'signed', issueCandidates: [], questions: [], safety: { level: 'normal', guidance: '' }, readyToConfirm: true, details: { desiredTime: '2026-09-12T13:00:00.000Z', desiredTimeLabel: 'Saturday, September 12, morning' } };
+  assert.equal(assessmentSchema.parse(analysis).details.desiredTimeLabel, 'Saturday, September 12, morning');
+  assert.equal(assessmentSchema.parse({ ...analysis, details: undefined }).details, undefined);
+  const confirmed = confirmationSchema.parse({ requestId: 'r1', status: 'intake', matchCount: 0, visit: { startsAt: '2026-09-12T13:00:00.000Z', timeZone: 'America/New_York', status: 'proposed', label: 'Saturday, September 12, morning' } });
+  assert.equal(confirmed.visit.status, 'proposed');
+  assert.equal(confirmationSchema.parse({ requestId: 'r1', status: 'intake', matchCount: 0 }).visit, undefined);
+});

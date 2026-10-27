@@ -91,7 +91,9 @@ describe.sequential("production Supabase money contract", () => {
     const storedDetails=expectOk(await service.from("service_requests").select("work_scope_snapshot,triage,price_disclosure").eq("id",requestId).single());if(!storedDetails)throw new Error("structured request details missing");expect(storedDetails.work_scope_snapshot).toMatchObject({symptom:"Leaking drain trap",location:"Kitchen sink"});expect(storedDetails.price_disclosure.priceCents).toBeUndefined();
     await call(`/api/requests/${requestId}/match`,operatorToken,"POST",{providerIds:[providerId]});
     await call(`/api/requests/${requestId}/messages`,customerToken,"POST",{text:"Integration persisted message"});
-    await call(`/api/requests/${requestId}/schedule`,customerToken,"PUT",{startsAt:"2026-09-08T14:00:00Z",timeZone:"America/New_York",status:"confirmed"});
+    const visitAt=new Date(Date.now()+3*86_400_000).toISOString();
+    await call(`/api/requests/${requestId}/schedule`,customerToken,"PUT",{startsAt:visitAt,timeZone:"America/New_York",status:"proposed"});
+    await call(`/api/requests/${requestId}/schedule`,providerToken,"PUT",{startsAt:visitAt,timeZone:"America/New_York",status:"confirmed"});
     const quote=await call(`/api/requests/${requestId}/quotes`,providerToken,"POST",{providerName:"API provider",scope:"Replace trap and test drain",amountCents:10000,ranking:{totalCents:10000,earliestStartAt:"2026-09-08T14:00:00Z",warrantyDays:90,licenseVerified:true,insuranceVerified:true,rating:0,distanceMiles:4,responseMinutes:5,languages:["en"]}});
     const deposit=await call(`/api/requests/${requestId}/deposit`,customerToken,"POST",{quoteId:quote.id},`deposit:${requestId}`);
     const confirm=async(kind:string,reference:string)=>{const r=await fetch(stripeFixtureUrl,{method:"POST",headers:{"x-fixture-secret":stripeFixtureSecret,"Content-Type":"application/json"},body:JSON.stringify({kind,requestId,providerReference:reference})});if(!r.ok)throw new Error(`Stripe fixture failed: ${r.status} ${await r.text()}`)};
