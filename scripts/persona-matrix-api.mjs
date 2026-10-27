@@ -160,12 +160,16 @@ for (const [b, expect, why] of [
 }
 
 sec("C3. schedule validation");
+const soon = new Date(Date.now() + 7 * 86_400_000).toISOString();
 for (const [b, expect, why] of [
   [{}, 400, "empty"],
   [{ startsAt: "not-a-date", timeZone: "America/New_York", status: "proposed" }, 400, "bad datetime"],
-  [{ startsAt: "2030-01-01T10:00:00Z", timeZone: "", status: "proposed" }, 400, "empty tz"],
-  [{ startsAt: "2030-01-01T10:00:00Z", timeZone: "America/New_York", status: "bogus" }, 400, "bad status"],
-  [{ startsAt: "2030-01-01T10:00:00Z", timeZone: "America/New_York", status: "proposed" }, 200, "valid"],
+  [{ startsAt: soon, timeZone: "", status: "proposed" }, 400, "empty tz"],
+  [{ startsAt: soon, timeZone: "America/New_York", status: "bogus" }, 400, "bad status"],
+  [{ startsAt: soon, timeZone: "Not/AZone", status: "proposed" }, 422, "unknown tz"],
+  [{ startsAt: "2020-01-01T10:00:00Z", timeZone: "America/New_York", status: "proposed" }, 422, "past date"],
+  [{ startsAt: soon, timeZone: "America/New_York", status: "confirmed" }, 403, "customer cannot self-confirm"],
+  [{ startsAt: soon, timeZone: "America/New_York", status: "proposed" }, 200, "valid"],
 ]) {
   const r = await api("PUT", `/api/requests/${reqId}/schedule`, { token: cu, body: b });
   check(`schedule: ${why}`, r.status === expect, `${r.status}`);

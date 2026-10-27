@@ -33,7 +33,7 @@ export function RequestActions({ data, activity, requestId, locale, busy, act, o
       <Text style={styles.heading}>{t('Visit', 'Visita')}</Text>
       {schedule && <Text style={styles.body}>{new Date(schedule.startsAt).toLocaleString(locale)} · {schedule.timeZone} · {schedule.status === 'confirmed' ? t('Confirmed', 'Confirmada') : t('Proposed', 'Propuesta')}</Text>}
       <VisitPicker locale={locale} busy={busy} onPropose={(date) => { void act(`${base}/schedule`, { startsAt: date.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, status: 'proposed' }, 'PUT'); }} />
-      {schedule?.status === 'proposed' && <Action label={t('Confirm proposed visit', 'Confirmar visita propuesta')} disabled={busy} onPress={() => { void act(`${base}/schedule`, { startsAt: schedule.startsAt, timeZone: schedule.timeZone, status: 'confirmed' }, 'PUT'); }} />}
+      {schedule?.status === 'proposed' ? <Text style={styles.muted}>{t('Waiting for your pro to confirm this time.', 'Esperando que su técnico confirme este horario.')}</Text> : null}
     </View>
     {changes.map((change) => <View key={change.id} style={styles.warning}>
       <Text style={styles.heading}>{t('Additional work', 'Trabajo adicional')} · {money(change.amountCents, locale)}</Text>

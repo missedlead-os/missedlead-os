@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
 import { z } from 'zod';
 import { Action, styles } from '../chat/ui';
-import { get, post } from './api';
+import { errorMessage, get, post } from './api';
 
 const property = z.object({ id: z.string(), label: z.string(), address: z.string(), building_type: z.string() });
 export function AccountScreen({ accessToken, locale, onBack }: { readonly accessToken: string; readonly locale: 'en' | 'es'; readonly onBack: () => void }) {
@@ -15,10 +15,10 @@ export function AccountScreen({ accessToken, locale, onBack }: { readonly access
   const [buildingType, setBuildingType] = useState<'house' | 'condo' | 'apartment' | 'commercial'>('house');
   const [notice, setNotice] = useState(''); const [busy, setBusy] = useState(false);
   async function load() { const result = await get('/api/properties', accessToken, z.object({ properties: z.array(property) })); setProperties(result.properties); }
-  useEffect(() => { void load().catch((error: unknown) => setNotice(error instanceof Error ? error.message : 'Connection failed')); }, [accessToken]);
+  useEffect(() => { void load().catch((error: unknown) => setNotice(errorMessage(error, locale))); }, [accessToken]);
   async function run(action: () => Promise<unknown>, success: string) {
     setBusy(true); setNotice('');
-    try { await action(); setNotice(success); } catch (error) { setNotice(error instanceof Error ? error.message : es ? 'No se pudo guardar.' : 'Could not save.'); }
+    try { await action(); setNotice(success); } catch (error) { setNotice(errorMessage(error, locale)); }
     finally { setBusy(false); }
   }
   return <ScrollView style={styles.safe} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
