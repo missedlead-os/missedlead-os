@@ -6,6 +6,7 @@ import { refineRemoteAssessment } from './remoteAssessment.js';
 import { diagnosticContext } from './diagnosticContext.js';
 import { createPartFromUri, FileState, GoogleGenAI, type Part } from "@google/genai";
 import { createHash } from "node:crypto";
+import { visitClockContext } from "./visitTime.js";
 import { z } from "zod";
 import { categorySchema, followupQuestionSchema, hazardSchema, issueCandidateSchema, modelAssessmentSchema, safetyLevelSchema, type AnalyzeInput, type IntakeLocale, type IntakeProvider, type ModelAssessment } from "./types.js";
 
@@ -34,10 +35,17 @@ const modelAssessmentWireSchema = z.object({
   summary: z.string().trim().min(3).max(1_000), issueCandidates: z.array(issueCandidateSchema.extend({ id: z.string().trim().min(1).max(120) })).max(5),
   questions: z.array(followupQuestionSchema.extend({ id: z.string().trim().min(1).max(120) })).max(6),
   materialsHint: z.array(z.string().trim().min(1).max(120)).max(6).optional(),
-  details: z.object({ location: z.string().trim().min(1).max(240).nullish(), dimensions: z.string().trim().min(1).max(120).nullish(), access: z.string().trim().min(1).max(240).nullish(), desiredTime: z.string().datetime().nullish() }).nullish(),
+  details: z.object({ location: z.string().trim().min(1).max(240).nullish(), dimensions: z.string().trim().min(1).max(120).nullish(), access: z.string().trim().min(1).max(240).nullish(), desiredTime: z.string().max(80).nullish(), visitDate: z.string().max(40).nullish(), visitTime: z.string().max(40).nullish(), visitWindow: z.string().max(40).nullish() }).nullish(),
   safety: z.object({ level: safetyLevelSchema, hazards: z.array(hazardSchema).max(5), guidance: z.string().trim().max(1_000) }),
   readyToConfirm: z.boolean(),
 });
+
+/** 모델이 offset 포함 ISO 등으로 내도 응답 전체를 버리지 않고 UTC ISO로 정규화한다. */
+const legacyDesiredTime = (value: string | null | undefined): string | undefined => {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
+};
 
 export const normalizeModelAssessment = (value: unknown, finishReason = "unknown", skippedQuestionIds: readonly string[] = []): ModelAssessment => {
   const parsed = modelAssessmentWireSchema.safeParse(value);
@@ -61,7 +69,10 @@ export const normalizeModelAssessment = (value: unknown, finishReason = "unknown
       ...(details?.location ? { location: details.location } : {}),
       ...(details?.dimensions ? { dimensions: details.dimensions } : {}),
       ...(details?.access ? { access: details.access } : {}),
-      ...(details?.desiredTime ? { desiredTime: details.desiredTime } : {}),
+      ...(legacyDesiredTime(details?.desiredTime) ? { desiredTime: legacyDesiredTime(details?.desiredTime) } : {}),
+      ...(details?.visitDate && /^\d{4}-\d{2}-\d{2}$/.test(details.visitDate.trim()) ? { visitDate: details.visitDate.trim() } : {}),
+      ...(details?.visitTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(details.visitTime.trim()) ? { visitTime: details.visitTime.trim() } : {}),
+      ...(details?.visitWindow && ["morning", "afternoon", "evening"].includes(details.visitWindow.trim().toLowerCase()) ? { visitWindow: details.visitWindow.trim().toLowerCase() } : {}),
     },
     readyToConfirm: parsed.data.evidenceQuality !== "unusable" && parsed.data.readyToConfirm && questions.length === 0 && parsed.data.issueCandidates.length > 0 && parsed.data.safety.level !== "emergency" && parsed.data.safety.hazards.length === 0,
   });
@@ -73,7 +84,8 @@ Never re-ask something the customer already answered or acknowledged, even in di
 When the likely issue is reasonably clear, list up to 6 generic materials or tools a technician would likely need in materialsHint (e.g., "P-trap kit", "pipe wrench", "wet/dry vacuum"); keep them generic, never fabricate brand- or model-specific parts, and omit the field when the issue is too unclear to guess responsibly.
 Readiness means there is enough provisional scope to request a professional quote and technician match. It never means a physical diagnosis is confirmed.
 After the user acknowledges skipping an optional detail, preserve it as unknown and do not ask that topic again under a different ID.
-Optional photos, dimensions, access details, and desired time may remain unknown. They do not block readiness after an acknowledged skip when category, symptom, and safety are sufficiently clear.
+Optional photos, dimensions, access details, and desired time may remain unknown.
+Visit timing: the prompt gives the current Charlotte date, weekday, and a 15-day calendar. When the customer states when they want the visit ("Saturday morning", "tomorrow at 3pm", "next Tuesday afternoon", "el sábado por la tarde"), fill details.visitDate (YYYY-MM-DD from the calendar, never a past date) and details.visitWindow (morning, afternoon, or evening) or details.visitTime (24-hour HH:MM when an exact time is given). Leave desiredTime null. Do not invent a time the customer never gave. If the timing is ambiguous or incomplete ("sometime next week", "this weekend", "ASAP", a weekday with no time of day, "afternoon" with no day), leave the visit fields empty and ask exactly one follow-up question with id visit_time that asks for the day and the time of day; in your reply say that you still need it and never say the visit time is saved or booked. The customer confirms the final time later; never promise a technician or arrival time. They do not block readiness after an acknowledged skip when category, symptom, and safety are sufficiently clear.
 Classify into exactly one of: plumbing, electrical, hvac, painting, pest_control, handyman. Use handyman for general repairs and for cleaning, removal, outdoor work, installation, assembly, or bundled small jobs that are not covered by another category.
 WeCover accepts home repair, cleaning, removal, outdoor work, installation and assembly, and bundled small home jobs. Moving or packing, appliance delivery, vehicle repair, consumer electronics or IT repair, and legal, tax, insurance, mortgage, medical, or general-knowledge questions are outside the service. "I can help with that" must never be said about work WeCover does not perform.
 For a request outside those home-service categories, briefly decline it, suggest the customer contact an appropriate specialist without naming a partner or promising a referral, and return issueCandidates=[], questions=[], materialsHint=[] and readyToConfirm=false. Do not answer unrelated questions even briefly, and do not continue the unrelated topic in later turns.
@@ -116,7 +128,8 @@ export class GeminiIntakeProvider implements IntakeAiProvider {
   async analyze(input: AnalyzeInput): Promise<ModelAssessment> {
     const transcript = input.history.map((message) => `${message.role.toUpperCase()}: ${message.content}`).join("\n");
     const references = diagnosticContext(input);
-    const prompt = `Reviewed diagnostic references (not proof of the cause): ${JSON.stringify(references)}.\nRequested locale: ${input.locale}.\nAcknowledged skipped optional questions: ${JSON.stringify(input.skippedQuestions)}. Preserve these topics as unknown and do not ask them again.\nConversation:\n${transcript}`;
+    const clock = input.now ? `${visitClockContext(input.now)}\n` : "";
+    const prompt = `${clock}Reviewed diagnostic references (not proof of the cause): ${JSON.stringify(references)}.\nRequested locale: ${input.locale}.\nAcknowledged skipped optional questions: ${JSON.stringify(input.skippedQuestions)}. Preserve these topics as unknown and do not ask them again.\nConversation:\n${transcript}`;
     const uploadedNames: string[] = [];
     try {
       const totalBytes = input.media.reduce((sum, media) => sum + media.buffer.byteLength, 0);

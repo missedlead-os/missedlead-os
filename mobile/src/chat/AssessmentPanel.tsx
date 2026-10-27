@@ -62,6 +62,7 @@ export function AssessmentPanel({ intake }: { readonly intake: Intake }) {
     </View> : null}
     {assessment.readyToConfirm ? <View style={styles.section}>
       <Text style={styles.heading}>{text.review}</Text>
+      {assessment.details?.desiredTimeLabel ? <Text style={styles.body} accessibilityLiveRegion="polite">{text.preferredVisit}: {assessment.details.desiredTimeLabel}</Text> : null}
       <Text style={styles.body}>{text.name}</Text>
       <TextInput accessibilityLabel={text.name} value={intake.name} onChangeText={intake.setName} editable={!intake.busy} autoComplete="name" maxLength={120} style={styles.input} />
       <Text style={styles.body}>{text.address}</Text>
