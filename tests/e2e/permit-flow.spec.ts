@@ -1,6 +1,7 @@
 /**
  * 허가 플로우 E2E: 공급자의 허가 포함 견적·기록, 고객 읽기전용 표시, 운영자 검증 큐.
  */
+import { viewCustomerRequests } from "../support/customer-intake";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const blank = () => ({ requests: [] as Record<string, unknown>[], quotes: [] as Record<string, unknown>[], changes: [] as Record<string, unknown>[], jobs: [] as Record<string, unknown>[], disputes: [] as Record<string, unknown>[], evidence: [] as Record<string, unknown>[], payments: [] as Record<string, unknown>[], audit: [] as Record<string, unknown>[] });
@@ -83,6 +84,7 @@ test("customer sees read-only county permit status on the request", async ({ pag
   });
 
   await actor(page, "customer");
+  await viewCustomerRequests(page);
   const panel = page.getByTestId("permit-panel");
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("Permit CLT-55 · Inspection pending · Awaiting operations verification");

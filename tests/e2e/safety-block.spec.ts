@@ -1,6 +1,7 @@
 /**
  * 안전 차단 E2E: 위험 인테이크는 매칭/결제 API를 호출하지 않고 하드 블록되는지 검증.
  */
+import { chooseRepair, handleRepairSelection, viewCustomerRequests } from "../support/customer-intake";
 import { expect, test } from "@playwright/test";
 import { resolve } from "node:path";
 
@@ -15,6 +16,7 @@ test("hazard intake is a hard block and never exposes matching or payment", asyn
     expect(req.headers().authorization).toMatch(/^Bearer demo\./);
     if (path === "/api/dashboard" && req.method() === "GET") return route.fulfill({ json: dashboard() });
     if (path === "/api/intake/analyze" && req.method() === "POST") {
+      if (await handleRepairSelection(route)) return;
       expect(blocked).toBeFalsy();
       expect(req.postDataBuffer()?.toString("utf8")).toContain("Strong gas smell beside the water heater");
       blocked = true;
@@ -24,13 +26,15 @@ test("hazard intake is a hard block and never exposes matching or payment", asyn
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await page.getByTestId("demo-customer").click();
+  await chooseRepair(page);
   const intake = page.getByTestId("customer-intake");
-  await intake.getByLabel("Describe the problem or answer the question").fill("Strong gas smell beside the water heater");
+  await intake.getByLabel("Describe the service or answer the question").fill("Strong gas smell beside the water heater");
   await intake.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("alert")).toContainText("911");
-  await expect(page.getByRole("button",{name:"Confirm and find technicians"})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Confirm and find local pros"})).toHaveCount(0);
   await page.getByRole("button", { name: "Sign out" }).click();
   await page.getByTestId("demo-customer").click();
+  await viewCustomerRequests(page);
   await expect(page.getByTestId("blocked-request")).toContainText("emergency services");
   await expect(page.getByRole("button", { name: "Choose this quote" })).toHaveCount(0);
   const path = resolve("artifacts", "e2e-safety-hard-block.png");

@@ -2,6 +2,7 @@
  * 고객 인테이크 E2E: 미디어 첨부, 비안전 질문 스킵, 불확실성 확인, 가안 확정.
  * API는 page.route로 목킹(결정적 레인).
  */
+import { chooseRepair, handleRepairSelection, repairSelection, repairPrompt } from "../support/customer-intake";
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 type RecordMap = Record<string, unknown>;
@@ -30,13 +31,17 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
     if (path === "/api/dashboard") return fulfill(route, 200, dashboard);
     if (path === "/api/intake/translate") return fulfill(route, 200, { original: "Water is dripping under the sink.", translated: "Hay agua goteando debajo del fregadero.", sourceLocale: "en", targetLocale: "es", warning: "AI translation may be inaccurate. Confirm prices, scope, warranties, and legal terms before approval.", translationToken: "translation-signed-1" });
     if (path === "/api/intake/analyze") {
+      if (await handleRepairSelection(route)) return;
       expect(request.headers().authorization).toMatch(/^Bearer demo\./);
       const body = request.postDataBuffer()?.toString("utf8") ?? "";
       expect(body).toContain('"mediaConsent":true');
       expect(body).toContain("sink.jpg");
-      expect(body).not.toContain("Hi, I’m the WeCover repair assistant");
+      expect(body).not.toContain("Hi, I’m the WeCover home service assistant");
       analysisCount += 1;
-      if (analysisCount === 1) expect(body).toContain('"history":[{"role":"user","content":"Water is dripping under the sink.');
+      if (analysisCount === 1) {
+        expect(body).toContain(`"history":[${JSON.stringify({ role: "user", content: repairSelection })},${JSON.stringify({ role: "assistant", content: repairPrompt })},`);
+        expect(body).toContain('{"role":"user","content":"Water is dripping under the sink.');
+      }
       if (analysisCount === 1) return fulfill(route, 200, { reply: "The leak appears to be near the drain connection. Is it dripping only while water runs?", locale: "en", issueCandidates: [{ id: "trap-leak", label: "Loose or worn drain trap", likelihood: "high", reason: "The location and visible drip fit a drain connection leak.", evidenceNeeded: ["A close photo of the curved pipe"] }], questions: [{ id: "when-dripping", prompt: "Does it drip only while the faucet is running?", requiredForSafety: false }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "assessment-1" });
       expect(body).toContain('"questionIds":["when-dripping"]');
       expect(body).toContain('"warningAcknowledged":true');
@@ -59,11 +64,12 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
   });
 
   await openCustomer(page);
-  await expect(page.getByRole("heading", { name: "Tell us what happened" })).toBeVisible();
+  await chooseRepair(page);
+  await expect(page.getByRole("heading", { name: "What do you need help with?" })).toBeVisible();
   await page.getByLabel("Add photos, video, or audio").setInputFiles({ name: "sink.jpg", mimeType: "image/jpeg", buffer: Buffer.from([1, 2, 3]) });
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-media-consent-desktop.png", fullPage: true });
   await page.getByText("I agree to secure AI processing", { exact: false }).click();
-  await page.getByLabel("Describe the problem or answer the question").fill("Water is dripping under the sink.");
+  await page.getByLabel("Describe the service or answer the question").fill("Water is dripping under the sink.");
   await page.getByRole("button", { name: "Send" }).click();
 
   await expect(page.getByText("Loose or worn drain trap")).toBeVisible();
@@ -74,13 +80,13 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
   await page.getByText("I understand the quote may change.").click();
   await page.getByRole("button", { name: "Skip and continue" }).click();
 
-  await expect(page.getByRole("heading", { name: "Review your repair request" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Review your service request" })).toBeVisible();
   await page.getByLabel("Your name").fill("Jordan Lee");
   await page.getByLabel("Service address").fill("101 Mint St, Charlotte, NC");
-  await page.getByRole("button", { name: "Confirm and find technicians" }).scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "Confirm and find local pros" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-confirm-desktop.png", fullPage: true });
   await page.getByText("A technician must inspect the leak", { exact: false }).click();
-  await page.getByRole("button", { name: "Confirm and find technicians" }).click();
+  await page.getByRole("button", { name: "Confirm and find local pros" }).click();
 
   expect(confirmed).toBe(true);
   await expect(page.getByTestId("chat-scope-summary")).toContainText("Water is dripping under the sink");
@@ -88,9 +94,9 @@ test("customer can share media, skip a non-safety question, review uncertainty, 
   await expect(page.getByTestId("request-details")).toHaveCount(0);
   await expect(page.getByTestId("payment-unavailable")).toContainText("No payment has been taken");
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-match-desktop.png", fullPage: true });
-  await page.getByRole("button", { name: "New request" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "New request", exact: true }).click();
   await expect(page.getByTestId("customer-intake")).toBeVisible();
-  await page.getByRole("button", { name: "View requests" }).click();
+  await page.getByRole("banner").getByRole("button", { name: "My requests", exact: true }).click();
   await expect(page.getByTestId("chat-scope-summary")).toContainText("Water is dripping under the sink");
 });
 
@@ -102,6 +108,7 @@ test("provider outage keeps the customer message and offers a retry", async ({ p
     if (path === "/api/capabilities") return fulfill(route, 200, { payments: { enabled: false, provider: "stripe" } });
     if (path === "/api/dashboard") return fulfill(route, 200, dashboard);
     if (path === "/api/intake/analyze") {
+      if (await handleRepairSelection(route)) return;
       const multipart = route.request().postDataBuffer()?.toString("utf8") ?? "";
       attempts.push(multipart.split("\r\n\r\n")[1]?.split("\r\n--")[0] ?? "");
       if (attempts.length === 1) return fulfill(route, 503, { error: "AI_PROVIDER_UNAVAILABLE" });
@@ -111,7 +118,8 @@ test("provider outage keeps the customer message and offers a retry", async ({ p
   });
 
   await openCustomer(page);
-  await page.getByLabel("Describe the problem or answer the question").fill("The breaker keeps tripping in the kitchen.");
+  await chooseRepair(page);
+  await page.getByLabel("Describe the service or answer the question").fill("The breaker keeps tripping in the kitchen.");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByRole("log").getByText("The breaker keeps tripping in the kitchen.")).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("temporarily unavailable");
@@ -121,7 +129,7 @@ test("provider outage keeps the customer message and offers a retry", async ({ p
   await expect(page.getByRole("alert")).toHaveCount(0);
   await expect(page.getByRole("log").getByText("The breaker keeps tripping in the kitchen.")).toHaveCount(1);
   expect(attempts).toHaveLength(2);
-  expect(JSON.parse(attempts[0]).history).toEqual([{ role: "user", content: "The breaker keeps tripping in the kitchen." }]);
+  expect(JSON.parse(attempts[0]).history).toEqual([{ role: "user", content: repairSelection }, { role: "assistant", content: repairPrompt }, { role: "user", content: "The breaker keeps tripping in the kitchen." }]);
   expect(attempts[1]).toBe(attempts[0]);
 });
 
@@ -135,6 +143,7 @@ test("Spanish mobile customer can confirm a provisional scope and enter matching
     if (path === "/api/capabilities") return fulfill(route, 200, { payments: { enabled: false, provider: "stripe" } });
     if (path === "/api/dashboard") return fulfill(route, 200, dashboard);
     if (path === "/api/intake/analyze") {
+      if (await handleRepairSelection(route)) return;
       analysisCount += 1;
       if (analysisCount === 1) return fulfill(route, 200, { reply: "La fuga parece estar cerca de la conexión del desagüe. ¿Gotea solo cuando corre el agua?", locale: "es", issueCandidates: [{ id: "fuga-trampa", label: "Conexión del desagüe floja", likelihood: "high", reason: "La ubicación coincide con una fuga del desagüe.", evidenceNeeded: [] }], questions: [{ id: "cuando-gotea", prompt: "¿Gotea solo cuando abre el grifo?", requiredForSafety: false }], safety: { level: "normal", guidance: "" }, readyToConfirm: false, assessmentToken: "assessment-es-1" });
       return fulfill(route, 200, { reply: "Hay suficiente información para preparar un alcance provisional.", locale: "es", issueCandidates: [{ id: "fuga-trampa", label: "Conexión del desagüe floja", likelihood: "high", reason: "La ubicación coincide con una fuga del desagüe.", evidenceNeeded: [] }], questions: [], safety: { level: "normal", guidance: "" }, readyToConfirm: true, uncertaintyWarning: "Un técnico debe inspeccionar la fuga antes de confirmar la causa y el precio final.", assessmentToken: "assessment-es" });
@@ -149,11 +158,12 @@ test("Spanish mobile customer can confirm a provisional scope and enter matching
   });
 
   await openCustomer(page);
-  await page.getByRole("button", { name: "ES" }).click();
+  await page.getByTestId("customer-intake").getByRole("group", { name: "Language", exact: true }).getByRole("button", { name: "ES", exact: true }).click();
+  await chooseRepair(page, "es");
   await page.getByLabel("Agregar fotos, video o audio").setInputFiles({ name: "fuga.jpg", mimeType: "image/jpeg", buffer: Buffer.from([1, 2, 3]) });
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-media-consent-spanish-320.png", fullPage: true });
   await page.getByText("Acepto el procesamiento seguro con IA", { exact: false }).click();
-  await page.getByLabel("Describa el problema o responda la pregunta").fill("Hay una fuga debajo del fregadero de la cocina.");
+  await page.getByLabel("Describa el servicio o responda la pregunta").fill("Hay una fuga debajo del fregadero de la cocina.");
   await page.getByRole("button", { name: "Enviar" }).click();
   await page.getByRole("button", { name: "No estoy seguro — omitir" }).click();
   await page.getByText("Puede omitir esta pregunta", { exact: false }).scrollIntoViewIfNeeded();
@@ -163,14 +173,14 @@ test("Spanish mobile customer can confirm a provisional scope and enter matching
   await expect(page.getByRole("button", { name: "Omitir y continuar" })).toBeInViewport();
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-skip-continue-spanish-320.png" });
   await page.getByRole("button", { name: "Omitir y continuar" }).click();
-  await page.getByRole("heading", { name: "Revise su solicitud" }).scrollIntoViewIfNeeded();
+  await page.getByRole("heading", { name: "Revise su solicitud de servicio" }).scrollIntoViewIfNeeded();
   await page.getByLabel("Su nombre").fill("Ana Torres");
   await page.getByLabel("Dirección del servicio").fill("202 Oak St, Charlotte, NC");
-  await page.getByRole("button", { name: "Confirmar y buscar técnicos" }).scrollIntoViewIfNeeded();
+  await page.getByRole("button", { name: "Confirmar y buscar profesionales" }).scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-confirm-spanish-320.png", fullPage: true });
   await page.getByText("Un técnico debe inspeccionar la fuga", { exact: false }).click();
-  await page.getByRole("button", { name: "Confirmar y buscar técnicos" }).click();
-  await expect(page.getByTestId("chat-scope-summary")).toContainText("Solicitud de reparación confirmada");
+  await page.getByRole("button", { name: "Confirmar y buscar profesionales" }).click();
+  await expect(page.getByTestId("chat-scope-summary")).toContainText("Solicitud de servicio confirmada");
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-match-spanish-320.png", fullPage: true });
   await page.getByTestId("coordination").scrollIntoViewIfNeeded();
   await page.screenshot({ path: "artifacts/wecover-chat-fixture-match-spanish-320-lower.png" });

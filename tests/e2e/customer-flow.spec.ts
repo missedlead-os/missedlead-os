@@ -2,6 +2,7 @@
  * 고객 플로우 E2E: 연락처 마스킹, 랭킹/탐색 결정성, 견적 선택·결제 게이트 등.
  * 일부는 서버 유닛 성격 테스트를 포함한다.
  */
+import { chooseRepair, handleRepairSelection, viewCustomerRequests } from "../support/customer-intake";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createHmac } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -40,13 +41,19 @@ test("demo fallback covers an unreachable API only, never real sessions or serve
 
 test("demo customer can complete intake without an API session", async ({ page }) => {
   await actor(page, "customer");
-  await page.getByRole("button", { name: "Clogged drain" }).click();
+  await chooseRepair(page);
+  const composer = page.getByTestId("customer-intake").getByRole("textbox", { name: "Describe the service or answer the question", exact: true });
+  for (const answer of ["The kitchen sink drain is clogged.", "It started yesterday.", "There is no immediate safety concern."]) {
+    await composer.fill(answer);
+    await page.getByTestId("customer-intake").getByRole("button", { name: "Send", exact: true }).click();
+    await expect(composer).toHaveValue("");
+  }
   await expect(page.getByTestId("intake-assessment")).toBeVisible();
   await page.getByLabel("Your name").fill("Demo customer");
   await page.getByLabel("Service address").fill("Charlotte, NC");
   await page.getByLabel(/I understand this is a provisional scope/).check();
-  await page.getByRole("button", { name: "Confirm and find technicians" }).click();
-  await expect(page.getByRole("heading", { name: "Leak or drain issue under the sink" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirm and find local pros" }).click();
+  await expect(page.getByRole("heading", { name: "Home repair service" })).toBeVisible();
   await expect(page.getByTestId("demo-request-view")).toBeVisible();
 });
 
@@ -85,6 +92,7 @@ test("renders server-ranked higher score first even when its price is higher",as
   ];
   await page.route("**/api/dashboard",route=>route.fulfill({json:{requests:[request],quotes,changes:[],jobs:[],disputes:[],evidence:[],payments:[],audit:[]}}));
   await actor(page,"customer");
+  await viewCustomerRequests(page);
   const comparison=page.getByTestId("quote-comparison");
   await expect(comparison.getByTestId("ranked-quote-1")).toContainText("Higher Score Provider");
   await expect(comparison.getByTestId("ranked-quote-1")).toContainText("score 96 · policy 3");
@@ -122,7 +130,8 @@ async function integrationActor(page: Page, role: "customer" | "provider" | "ope
 }
 
 async function selectRequest(page: Page, marker: string) {
-  const picker = page.getByLabel("Select a job");
+  if (await page.getByTestId("customer-intake").count()) await viewCustomerRequests(page);
+  const picker = page.getByRole("main").getByRole("combobox", { name: /^(Select a job|Service request)/ });
   const value = await picker.locator("option").filter({ hasText: marker }).getAttribute("value");
   if (!value) throw new Error(`Integration request not visible: ${marker}`);
   await picker.selectOption(value);
@@ -151,19 +160,21 @@ test("Supabase integration executes customer, operator, provider quote and evide
   const assessment={reply:"The sink drain connection is the likely source. Review this provisional scope before matching.",category:"plumbing" as const,summary:`${marker} with verified access details`,issueCandidates:[{id:"drain-trap-leak",label:"Drain trap leak",likelihood:"high" as const,reason:"The reported location and symptom fit a leaking drain connection.",evidenceNeeded:[]}],questions:[],details:{location:"Kitchen sink",access:"Cabinet access available"},safety:{level:"normal" as const,hazards:[],guidance:""},readyToConfirm:true};
   const assessmentToken=new AssessmentTokenSigner(intakeSigningSecret).sign({version:1,assessmentId:crypto.randomUUID(),actorId:customerId!,expiresAt:new Date(Date.now()+30*60_000).toISOString(),locale:"en",assessment,skippedQuestionIds:[],uncertaintyAcknowledged:false,attachmentTypes:[],attachmentNames:[],attachmentDigests:[],history:[{role:"user",content:`${marker} with verified access details`}],translations:[]});
   await page.route("**/api/intake/analyze",async route=>{
+    if (await handleRepairSelection(route)) return;
     const body=route.request().postDataBuffer()?.toString("utf8")??"";
     expect(body).toContain(marker);
     await route.fulfill({json:{...assessment,locale:"en",assessmentToken}});
   });
 
   await integrationActor(page, "customer", customerToken!, customerId!);
-  await page.getByLabel("Describe the problem or answer the question").fill(`${marker} with verified access details`);
+  await chooseRepair(page);
+  await page.getByLabel("Describe the service or answer the question").fill(`${marker} with verified access details`);
   await page.getByRole("button",{name:"Send"}).click();
-  await expect(page.getByRole("heading",{name:"Review your repair request"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Review your service request"})).toBeVisible();
   await page.getByLabel("Your name").fill("Integration Customer");
   await page.getByLabel("Service address").fill("Charlotte, NC");
   await page.getByText("I understand this is a provisional scope",{exact:false}).click();
-  await page.getByRole("button",{name:"Confirm and find technicians"}).click();
+  await page.getByRole("button",{name:"Confirm and find local pros"}).click();
   await expect(page.getByRole("heading", { name: new RegExp(marker) })).toBeVisible();
 
   await integrationActor(page, "provider", providerToken!, providerId!);
@@ -250,6 +261,7 @@ test("customer full flow renders every role and enforces lifecycle API contracts
     expect(request.headers().authorization).toMatch(/^Bearer demo\./);
     if (url === "/api/dashboard" && request.method() === "GET") return fulfill(route, 200, state);
     if (url === "/api/intake/analyze" && request.method() === "POST") {
+      if (await handleRepairSelection(route)) return;
       expect(phase).toBe("empty");
       const body=request.postDataBuffer()?.toString("utf8")??"";
       expect(body).toContain("Replace the leaking kitchen sink trap and test the drain.");
@@ -327,16 +339,17 @@ test("customer full flow renders every role and enforces lifecycle API contracts
     throw new Error(`Unexpected API request: ${request.method()} ${url}`);
   });
   await actor(page, "customer");
+  await chooseRepair(page);
   const intake = page.getByTestId("customer-intake");
   await intake.getByLabel("Add photos, video, or audio").setInputFiles({name:"intake.webm",mimeType:"audio/webm",buffer:Buffer.from([1,2,3])});
   await intake.getByText("I agree to secure AI processing",{exact:false}).click();
-  await intake.getByLabel("Describe the problem or answer the question").fill("Replace the leaking kitchen sink trap and test the drain.");
+  await intake.getByLabel("Describe the service or answer the question").fill("Replace the leaking kitchen sink trap and test the drain.");
   await intake.getByRole("button",{name:"Send"}).click();
-  await expect(page.getByRole("heading",{name:"Review your repair request"})).toBeVisible();
+  await expect(page.getByRole("heading",{name:"Review your service request"})).toBeVisible();
   await page.getByLabel("Your name").fill("Charlotte Customer");
   await page.getByLabel("Service address").fill("101 Mint St, Charlotte, NC");
   await page.getByText("I understand this is a provisional scope",{exact:false}).click();
-  await page.getByRole("button",{name:"Confirm and find technicians"}).click();
+  await page.getByRole("button",{name:"Confirm and find local pros"}).click();
   await expect(page.getByRole("heading", { name: /Replace the leaking/ })).toBeVisible();
   await expect(page.getByTestId("chat-scope-summary")).toContainText("Kitchen sink");
   await expect(page.getByTestId("request-details")).toHaveCount(0);
@@ -355,6 +368,7 @@ test("customer full flow renders every role and enforces lifecycle API contracts
   await expect(page.getByRole("status")).toContainText("sent to the customer");
 
   await actor(page, "customer");
+  await viewCustomerRequests(page);
   await page.getByRole("button", { name: "Choose this quote" }).click();
   await expect(page.getByTestId("payment-confirmation")).toContainText("$25.00");
   await page.getByTestId("payment-confirmation").getByRole("button", { name: "Confirm payment" }).click();
@@ -381,6 +395,7 @@ test("customer full flow renders every role and enforces lifecycle API contracts
   await expect(page.getByRole("status")).toContainText("72-hour");
 
   await actor(page, "customer");
+  await viewCustomerRequests(page);
   await expect(page.getByTestId("completion-protection")).toBeVisible();
   await page.getByRole("button", { name: "Pay balance" }).click();
   await expect(page.getByTestId("payment-confirmation")).toContainText("$100.00");
