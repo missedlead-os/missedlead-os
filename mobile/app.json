@@ -6,12 +6,22 @@
     "orientation": "portrait",
     "scheme": "wecover",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1D53D6"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.wecover.customer"
     },
     "android": {
       "package": "com.wecover.customer",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1D53D6"
+      },
       "allowBackup": false
     },
     "extra": {

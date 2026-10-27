@@ -2,6 +2,7 @@
  * 생성 이미지 에셋: OpenAI images API → 실패 시 Gemini 이미지 모델 순으로 시도.
  * 출력: public/img/*.png — 코드의 인라인 SVG 자리에 <img>로 참조한다.
  * 실행: node scripts/gen-images.mjs
+ * 참고: login-hero/empty-state/아이콘/OG 이미지는 이제 assets-src/*.svg + scripts/render-brand-assets.mjs 로 생성한다.
  */
 import { config } from "dotenv";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -14,16 +15,8 @@ const brand = "Utility blue (#1D53D6) and warm amber (#F2C14E) accents on a clea
 
 const assets = [
   {
-    file: "public/img/login-hero.png", w: 1024, h: 768,
-    prompt: `Wide welcoming illustration for a home-repair app login screen: a charming two-story American suburban craftsman house in Charlotte North Carolina with a blue front door, a friendly repair van parked in the driveway, subtle wrench and safety-shield motifs floating as small badges, a large water droplet accent. ${brand}.`,
-  },
-  {
     file: "public/img/intake-scan.png", w: 1024, h: 576,
     prompt: `Photorealistic close-up photograph of a brushed stainless steel kitchen sink drain strainer with fresh water droplets beading on the metal, cool soft daylight, shallow depth of field, muted gray-blue tones, high detail, no text.`,
-  },
-  {
-    file: "public/img/empty-state.png", w: 640, h: 512,
-    prompt: `Minimal spot illustration of an open blue toolbox with a wrench, a screwdriver and a single water droplet, floating on an empty light warm-gray background with generous whitespace, soft shadows, flat modern style, no text.`,
   },
 ];
 

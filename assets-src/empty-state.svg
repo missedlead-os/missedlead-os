@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 384" width="480" height="384">
+  <defs>
+    <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D6AF0"/><stop offset="1" stop-color="#1D53D6"/></linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5C8CF5"/><stop offset="1" stop-color="#3B6FEA"/></linearGradient>
+    <linearGradient id="drop" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFD66B"/><stop offset="1" stop-color="#EE9A12"/></linearGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#E4E9F0"/><stop offset="1" stop-color="#9AA7B8"/></linearGradient>
+    <mask id="notch" maskUnits="userSpaceOnUse" x="-100" y="-200" width="200" height="400"><rect x="-100" y="-200" width="200" height="400" fill="#fff"/><rect x="-10" y="-90" width="20" height="44" fill="#000"/></mask>
+  </defs>
+  <ellipse cx="240" cy="344" rx="170" ry="16" fill="#1B2A4A" opacity=".16"/>
+
+  <!-- lid, standing open behind -->
+  <path d="M126 64 H354 Q362 64 364 72 L378 186 H102 L116 72 Q118 64 126 64 Z" fill="url(#lid)"/>
+  <path d="M142 80 H338 L350 172 H130 Z" fill="#fff" opacity=".12"/>
+  <path d="M196 64 V44 Q196 34 206 34 H274 Q284 34 284 44 V64" fill="none" stroke="#173FA8" stroke-width="12" stroke-linecap="round"/>
+
+  <!-- tools poking out -->
+  <!-- wrench -->
+  <g transform="translate(160 150) rotate(-24)">
+    <rect x="-9" y="-22" width="18" height="166" rx="9" fill="url(#steel)" stroke="#6F7C8F" stroke-width="3"/>
+    <g mask="url(#notch)"><circle cx="0" cy="-46" r="30" fill="url(#steel)" stroke="#6F7C8F" stroke-width="3"/></g>
+    <circle cx="0" cy="120" r="5" fill="#6F7C8F"/>
+  </g>
+  <!-- screwdriver -->
+  <g transform="translate(306 168) rotate(14)">
+    <rect x="-3.5" y="-20" width="7" height="90" rx="3" fill="url(#steel)" stroke="#6F7C8F" stroke-width="2"/>
+    <rect x="-14" y="-104" width="28" height="86" rx="13" fill="#22304A"/>
+    <rect x="-14" y="-62" width="28" height="12" fill="#F2C14E"/>
+    <rect x="-14" y="-40" width="28" height="12" fill="#F2C14E"/>
+  </g>
+
+  <!-- body -->
+  <path d="M82 214 H398 Q408 214 408 224 V318 Q408 332 394 332 H86 Q72 332 72 318 V224 Q72 214 82 214 Z" fill="url(#body)"/>
+  <!-- cavity -->
+  <path d="M96 196 H384 L404 228 H76 Z" fill="#0F2C80"/>
+  <path d="M96 196 H384 L388 202 H92 Z" fill="#173FA8"/>
+  <!-- front band & latch -->
+  <rect x="72" y="262" width="336" height="10" fill="#173FA8" opacity=".55"/>
+  <rect x="214" y="246" width="52" height="40" rx="7" fill="#DDE3EC" stroke="#9AA7B8" stroke-width="3"/>
+  <rect x="226" y="258" width="28" height="8" rx="4" fill="#8392A7"/>
+  <rect x="72" y="316" width="336" height="16" rx="8" fill="#173FA8" opacity=".5"/>
+  <!-- side handles -->
+  <rect x="58" y="238" width="16" height="42" rx="7" fill="#173FA8"/>
+  <rect x="406" y="238" width="16" height="42" rx="7" fill="#173FA8"/>
+  <path d="M88 226 H392" stroke="#6FA0FF" stroke-width="3" opacity=".6"/>
+
+  <!-- amber water drop -->
+  <g>
+    <path d="M404 78 C386 108 372 126 372 146 A32 32 0 0 0 436 146 C436 126 422 108 404 78 Z" fill="url(#drop)" stroke="#C97A06" stroke-width="3"/>
+    <path d="M388 140 Q388 156 400 164" fill="none" stroke="#FFF1C4" stroke-width="6" stroke-linecap="round"/>
+  </g>
+  <ellipse cx="404" cy="196" rx="26" ry="6" fill="none" stroke="#EE9A12" stroke-width="3" opacity=".55"/>
+</svg>
