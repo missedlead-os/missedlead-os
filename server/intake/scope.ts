@@ -18,6 +18,18 @@ const NON_SERVICEABLE_PATTERNS: readonly RegExp[] = [
   /\b(?:weather forecast|restaurant recommendation|sports? (?:score|prediction)|pron[oó]stico del tiempo)\b/,
 ];
 
+/** Explicit out-of-scope jobs take precedence over broad home-service vocabulary. */
+const EXPLICIT_NON_SERVICEABLE_PATTERNS: readonly RegExp[] = [
+  /\b(?:moving (?:boxes|furniture|appliances)|move (?:my |the |a )?(?:piano|boxes|furniture) to)\b/,
+  /\b(?:deliver (?:my |the |a |new )*(?:fridge|refrigerator|dishwasher|furniture)|(?:fridge|refrigerator|dishwasher|furniture|appliance) delivery|entrega de muebles)\b/,
+  /\b(?:car|truck|vehicle|automobile|motorcycle|suv)(?:'s)? (?:brakes?|battery|engine|repair|maintenance)\b/,
+  /\b(?:oil change for (?:my |the |a )?(?:car|truck|vehicle|suv))\b/,
+  /\b(?:repair|fix|replace) (?:my |the |a )?(?:iphone|smartphone|cell ?phone|computer(?!\s+desk\b)|laptop|ps5|game console)\b/,
+  /\b(?:iphone|smartphone|cell ?phone|laptop|computer|ps5|game console|smart tv) (?:screen|battery|not (?:working|turning on)|won't (?:boot|turn on))\b/,
+  /\b(?:reparar (?:mi |la |el )?(?:computadora|celular)|(?:mi )?celular no prende)\b/,
+  /\b(?:(?:wi-?fi )?router (?:not working|is down)|internet (?:is )?down(?![^.!?]*\b(?:cable|wire|wiring)\b[^.!?]*\b(?:in|inside|through) (?:the |a )?wall\b)|(?:internet|isp) (?:problems?|outage))\b/,
+];
+
 /** 실제 수리 요청 신호. 미취급 표현이 섞여 있어도 이 신호가 있으면 정상 접수로 둔다. */
 const SERVICEABLE_SIGNALS: readonly RegExp[] = [
   /\b(?:leak|leaking|drip|drain|clog|pipe|faucet|toilet|sink|shower|water heater|sewer|sump pump)\b/,
@@ -49,6 +61,7 @@ const normalize = (value: string): string => value.normalize("NFD").replace(/[\u
 /** 접수 대상(요약·후보)이 취급 범위 밖인지 판정한다. 대화 원문이 아니라 접수될 내용만 본다. */
 export const isNonServiceableSubject = (subject: string): boolean => {
   const text = normalize(subject);
+  if (EXPLICIT_NON_SERVICEABLE_PATTERNS.some((pattern) => pattern.test(text))) return true;
   if (SERVICEABLE_SIGNALS.some((pattern) => pattern.test(text))) return false;
   return NON_SERVICEABLE_PATTERNS.some((pattern) => pattern.test(text));
 };
