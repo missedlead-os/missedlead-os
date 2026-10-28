@@ -45,6 +45,65 @@ describe("intake service scope", () => {
     ]) expect(isNonServiceableSubject(subject), subject).toBe(false);
   });
 
+  it.each([
+    "Help with moving boxes to a new apartment",
+    "Fix my car's brakes",
+    "Deliver my new fridge",
+    "Repair my iPhone screen",
+    "Wifi router not working, internet down",
+    "Smart TV not turning on",
+    "Dishwasher delivery",
+    "Reparar mi computadora",
+    "my car battery is dead",
+    "oil change for my SUV",
+    "fix my PS5",
+    "my laptop won't boot",
+    "internet is down, call Comcast",
+    "can you move my piano to the new house",
+    "entrega de muebles",
+    "mi celular no prende"
+])("declines explicit out-of-scope request: %s", (subject) => {
+    expect(isNonServiceableSubject(subject)).toBe(true);
+    const result = enforceServiceScope(assessment({ summary: subject, readyToConfirm: true }), "en");
+    expect(result.issueCandidates).toEqual([]);
+    expect(result.questions).toEqual([]);
+    expect(result.materialsHint).toEqual([]);
+    expect(result.readyToConfirm).toBe(false);
+    expect(result.reply).toContain("outside WeCover's home services");
+  });
+
+  it.each([
+    "Fix my computer desk drawer",
+    "Internet is down because a contractor cut the cable in the wall",
+    "Install outlets for my home office computer",
+    "TV not turning on after power outage, outlet dead?",
+    "Move my washer to the basement and hook it up",
+    "Replace the battery in my smoke detector",
+    "Kitchen sink drain leak, replace P-trap",
+    "Assemble IKEA furniture",
+    "Lawn mowing and yard cleanup",
+    "Install a ceiling fan",
+    "Pest control for ants",
+    "Junk removal old couch",
+    "TV mounting on wall",
+    "Replace dishwasher",
+    "Water heater leaking and furniture damaged",
+    "Install an EV charger in my garage",
+    "Garage door opener not working",
+    "Dryer vent cleaning",
+    "Install a smart thermostat",
+    "Run ethernet cable through the wall",
+    "Mount my TV and hide the wires",
+    "Move-out cleaning for my apartment",
+    "Haul away my old fridge",
+    "Install the dishwasher I just bought",
+    "car port roof is leaking",
+    "fuga en el baño",
+    "instalar ventilador de techo"
+])("accepts home service request: %s", (subject) => {
+    expect(isNonServiceableSubject(subject)).toBe(false);
+  });
+
   it("removes the request path for out-of-scope work instead of scoping it", () => {
     const result = enforceServiceScope(assessment({
       summary: "Movers to pack the apartment next week.",
