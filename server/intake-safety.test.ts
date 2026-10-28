@@ -190,3 +190,51 @@ it.each([
   expect(result.safety.hazards).toEqual(hazard ? [hazard] : []);
   expect(result.safety.level).toBe(hazard ? "emergency" : "normal");
 });
+
+// Round 5 phrase gaps and observation-local Korean denials.
+it.each([
+  ["la alarma de monóxido de carbono está sonando", "gas", "es"],
+  ["el detector de monóxido de carbono está pitando", "gas", "es"],
+  ["el detector de monóxido de carbono está sonando", "gas", "es"],
+  ["huele a quemado en el enchufe", "electrical", "es"],
+  ["huele a quemado en el tomacorriente", "electrical", "es"],
+  ["huele a quemado en el panel eléctrico", "electrical", "es"],
+  ["no, la alarma de monóxido de carbono está sonando", "gas", "es"],
+  ["no huele a quemado en el enchufe", null, "es"],
+  ["no huele a quemado en el tomacorriente", null, "es"],
+  ["no huele a quemado en el panel eléctrico", null, "es"],
+  ["no hay alarma de monóxido de carbono está sonando", null, "es"],
+  ["no hay detector de monóxido de carbono está pitando", null, "es"],
+  ["no hay detector de monóxido de carbono está sonando", null, "es"],
+  ["가스 냄세가 나요", "gas", "en"],
+  ["가스냄세가나요", "gas", "en"],
+  ["가스가 새요", "gas", "en"],
+  ["가스 새는 냄새", "gas", "en"],
+  ["가스 냄새는 안 나요", null, "en"],
+  ["가스 냄새 안 나요", null, "en"],
+  ["가스 냄새는 없어요", null, "en"],
+  ["가스 냄새 안남", null, "en"],
+  ["가스냄세는안나요", null, "en"],
+  ["가스 냄세는 없어요", null, "en"],
+  ["가스 냄새가 나요", "gas", "en"],
+  ["가스 냄새가 나요, 연기는 안 나요", "gas", "en"],
+  ["가스 냄새가 나요 연기는 안 나요", "gas", "en"],
+  ["가스 냄새는 안 나요, 가스가 새요", "gas", "en"],
+  ["가스 냄새는 없어요, 콘센트에서 불꽃이 튀어요", "electrical", "en"],
+  ["가스 냄새는 안 나요 가스 냄세가 나요", "gas", "en"],
+  ["the CO alarm is sounding", "gas", "en"],
+  ["burning smell coming from the outlet", "electrical", "en"],
+  ["I smell gas", "gas", "en"],
+  ["I do not smell gas", null, "en"],
+  ["No gas smell, smoke is coming from the outlet", "fire", "en"],
+  ["The CO alarm needs a new battery", null, "en"],
+  ["no burning smell coming from the outlet", null, "en"],
+] as const)("classifies round 5 observation: %s", (content, hazard, locale) => {
+  const result = enforceSafetyFloor(assessment(), [{ role: "user", content }], locale);
+  expect(result.safety.hazards).toEqual(hazard ? [hazard] : []);
+  expect(result.safety.level).toBe(hazard ? "emergency" : "normal");
+  const emergency = emergencyGuidance({
+    history: [{ role: "user", content }], locale, actorId: "public", now: new Date("2026-10-28T00:00:00Z"),
+  });
+  expect(emergency?.response.safety.hazards).toEqual(hazard ? [hazard] : undefined);
+});

@@ -12,14 +12,16 @@ const HAZARD_PATTERNS: readonly { readonly hazard: Hazard; readonly pattern: Reg
   { hazard: "structural", pattern: /\b(?:structural collapse|ceiling (?:is )?falling|wall (?:is )?collapsing|colapso estructural|techo (?:se )?(?:cae|esta cayendo))\b/g },
   { hazard: "severe_flooding", pattern: /\b(?:severe flood(?:ing)?|rapid flooding|filling rapidly with water|water (?:is )?rising rapidly|inundacion grave|agua sube rapidamente)\b/g },
   // CO uses the existing gas hazard so signed assessments and clients stay compatible.
-  { hazard: "gas", pattern: /\b(?:smells?(?: of| like)? natural gas|(?:smell(?:s|ing)?(?: of| like)? )?rotten eggs?|(?:carbon monoxide|co) (?:detector|alarm)(?: is| keeps)? (?:going off|beeping|sounding)|(?:detector|alarma) de monoxido de carbono(?: se)? (?:activa|suena|pitando)|(?:olor|huele) a (?:gas natural|huevos podridos))\b|가스\s*냄새|썩은\s*달걀\s*냄새|일산화탄소\s*(?:경보기|감지기)(?:가|에서)?\s*(?:울|작동)/g },
-  { hazard: "electrical", pattern: /\b(?:sparking|burning smell coming from (?:the )?(?:breaker panel|outlet|wiring)|(?:outlet|socket)(?: is| feels)? hot|(?:got|was|am) shocked|(?:wire|wires|wiring)(?: is| are)? exposed|(?:enchufe|tomacorriente)(?: esta)? caliente|olor a quemado (?:en|del?) (?:el )?(?:enchufe|panel electrico)|descarga electrica|cables? expuestos)\b|콘센트에서\s*불꽃|(?:콘센트|배전반)(?:에서)?\s*(?:타는\s*냄새|뜨거)|감전|전선(?:이|가)?\s*노출/g },
+  { hazard: "gas", pattern: /\b(?:smells?(?: of| like)? natural gas|(?:smell(?:s|ing)?(?: of| like)? )?rotten eggs?|(?:carbon monoxide|co) (?:detector|alarm)(?: is| keeps)? (?:going off|beeping|sounding)|(?:detector|alarma) de monoxido de carbono(?: se| esta)? (?:activa|suena|pitando|sonando)|(?:olor|huele) a (?:gas natural|huevos podridos))\b|가스\s*냄[새세]|가스(?:가)?\s*새(?:요|는\s*냄[새세])|썩은\s*달걀\s*냄새|일산화탄소\s*(?:경보기|감지기)(?:가|에서)?\s*(?:울|작동)/g },
+  { hazard: "electrical", pattern: /\b(?:sparking|burning smell coming from (?:the )?(?:breaker panel|outlet|wiring)|(?:outlet|socket)(?: is| feels)? hot|(?:got|was|am) shocked|(?:wire|wires|wiring)(?: is| are)? exposed|(?:enchufe|tomacorriente)(?: esta)? caliente|(?:olor|huele) a quemado (?:en|del?) (?:el )?(?:enchufe|tomacorriente|panel electrico)|descarga electrica|cables? expuestos)\b|콘센트에서\s*불꽃|(?:콘센트|배전반)(?:에서)?\s*(?:타는\s*냄새|뜨거)|감전|전선(?:이|가)?\s*노출/g },
   { hazard: "fire", pattern: /집에\s*불이\s*났|화재가\s*발생|연기가\s*(?:나|납니다|나와)/g },
   { hazard: "structural", pattern: /\b(?:(?:ceiling|wall)(?: is)? (?:sagging|collapsing|about to collapse)|(?:techo|pared)(?: se)?(?: esta)? (?:hundiendo|colapsando))\b|천장(?:이|이 곧)?\s*(?:처지|처져|무너지)/g },
   { hazard: "severe_flooding", pattern: /\b(?:water is flooding|(?:pipe|pipes)(?: has| have)? burst|burst pipes?|(?:basement|house|room)(?: is)? flooding|se esta inundando|(?:sotano|casa)(?: se)?(?: esta)? inundando|tuberia (?:revento|rota))\b|물이\s*(?:계속\s*)?차올라|(?:지하실|집)(?:이|에)?\s*(?:침수|물이 차)/g },
 ];
 // Negation is restricted to the matched observation, never the entire sentence.
 const NEGATED_OBSERVATION = /\b(?:no|not|without|don't|do not|doesn't|does not|isn't|is not|can't|cannot|cant|couldn't|could not|didn't|did not|ningun|ninguna|sin)(?:\s+(?:hay|any|signs?|of|visible|active|obvious|detectable|see|seeing|smell|smelling|evidence|the|a|an|smoke|gas|fire|sparks?|flames?|humo|fuego|chispas?|olor|or|nor|ni|and|y|electrical|contact|standing|water|flooding|contacto|electrico|inundacion))*\s*$/;
+const KOREAN_GAS_SMELL = /^가스\s*냄[새세]$/;
+const KOREAN_DENIAL_SUFFIX = /^(?:는|가|은|이)?\s*(?:안\s*(?:나|남)|없)/;
 const DENIAL_PREFIX = /^\s*(?:(?:there (?:is|are)|i (?:see|have|notice))\s+)?(?:no(?:\s+hay)?|without|sin|ningun[ao]?)\s+/;
 const OBSERVATION_PREDICATE = /\b(?:is|are|was|were|am|has|have|had|can|could|will|would|must|should|does|do|did|i|we|you|it|they|he|she|hay|esta|estan|estaba|tengo|tiene|tenemos|puedo|puede|veo|vemos|sale|salen|sube|suben|cae|caen|huele|huelo|olemos|aparece|aparecen|from|near|under|through|desde|cerca|sale|salen|comes?|appears?|rises?|billows?|emerges?|spreads?|continues?)\b/;
 const ACTIVE_PARTICIPLE = /\b(?!(?:flooding|wiring|ceiling|standing)\b)\w+(?:ing|ando|iendo)\b/;
@@ -51,6 +53,7 @@ const explicitHazards = (history: readonly { readonly role: "user" | "assistant"
         const before = clause.slice(0, match.index);
         const after = clause.slice(match.index + match[0].length);
         if (NEGATED_OBSERVATION.test(before)) continue;
+        if (KOREAN_GAS_SMELL.test(match[0]) && KOREAN_DENIAL_SUFFIX.test(after)) continue;
         if (candidate.hazard === "fire" && SENSOR_CONTEXT.test(before)) continue;
         if (candidate.hazard === "fire" && HISTORICAL.test(before) && RESOLVED_FIRE.test(after)) continue;
         if (candidate.hazard === "gas" && PAST_GAS_OBSERVATION.test(before)) continue;
