@@ -54,6 +54,50 @@ describe("visit time resolution", () => {
     expect(resolveVisitPreference({}, NOW, "en").status).toBe("none");
   });
 
+  it.each([
+    ["03:00", "outside_hours"], ["06:59", "outside_hours"], ["07:00", "ok"],
+    ["18:30", "ok"], ["20:00", "ok"], ["20:30", "outside_hours"], ["23:30", "outside_hours"],
+  ])("checks exact local visit time %s", (visitTime, status) => {
+    for (const visitDate of ["2026-09-12", "2026-12-12"]) {
+      expect(resolveVisitPreference({ visitDate, visitTime }, NOW, "en").status).toBe(status);
+    }
+  });
+
+  it("keeps all visit windows valid", () => {
+    for (const visitWindow of ["morning", "afternoon", "evening"] as const) {
+      expect(resolveVisitPreference({ visitDate: "2026-09-12", visitWindow }, NOW, "en").status).toBe("ok");
+    }
+  });
+
+  it("drops outside-hours fields and re-asks in en/es, respecting skips and existing questions", () => {
+    for (const locale of ["en", "es"] as const) {
+      const details = { visitDate: "2026-09-12", visitTime: "03:00", visitWindow: "morning" as const, desiredTime: "2026-09-12T07:00:00Z", desiredTimeLabel: "old" };
+      const result = applyVisitPreference(base(details), NOW, locale);
+      expect(result.details).toEqual({ location: "kitchen" });
+      expect(result.readyToConfirm).toBe(false);
+      expect(result.questions).toEqual([{ id: "visit_time", requiredForSafety: false, prompt: expect.stringContaining("7 AM") }]);
+      expect(result.questions[0]?.prompt).toContain("8 PM");
+      expect(result.questions[0]?.prompt).toContain(locale === "es" ? "reservar" : "booked");
+      const skipped = applyVisitPreference(base(details), NOW, locale, ["visit_time"]);
+      expect(skipped.details).toEqual({ location: "kitchen" });
+      expect(skipped.questions).toEqual([]);
+      expect(skipped.readyToConfirm).toBe(true);
+      const existing = applyVisitPreference(base(details, { questions: result.questions }), NOW, locale);
+      expect(existing.questions).toHaveLength(1);
+    }
+  });
+
+  it.each([
+    ["2026-09-12T07:00:00Z", false], ["2026-09-12T11:00:00Z", true],
+    ["2026-12-12T11:59:00Z", false], ["2026-12-12T12:00:00Z", true],
+    ["2026-12-13T01:00:00Z", true], ["2026-12-13T01:30:00Z", false],
+  ])("checks legacy desiredTime %s in Charlotte local time", (desiredTime, allowed) => {
+    const result = applyVisitPreference(base({ desiredTime }), NOW, "en");
+    expect(result.readyToConfirm).toBe(allowed);
+    expect(result.details.desiredTime).toBe(allowed ? new Date(desiredTime).toISOString() : undefined);
+    if (!allowed) expect(result.questions[0]?.prompt).toContain("7 AM and 8 PM");
+  });
+
   it("gives the model the current Charlotte date, weekday, and a calendar", () => {
     const context = visitClockContext(NOW);
     expect(context).toContain("2026-09-05 08:00, Saturday");

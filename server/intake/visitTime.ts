@@ -7,6 +7,7 @@ import type { IntakeLocale, ModelAssessment } from "./types.js";
 
 export const VISIT_TIME_ZONE = "America/New_York";
 export const MAX_VISIT_LEAD_DAYS = 180;
+export const CUSTOMER_VISIT_HOURS = { start: 7 * 60, end: 20 * 60 } as const;
 const WINDOW_START_HOUR = { morning: 9, afternoon: 13, evening: 17 } as const;
 export type VisitWindow = keyof typeof WINDOW_START_HOUR;
 
@@ -16,6 +17,12 @@ const zoneParts = (instant: Date, timeZone: string) => {
   const parts = new Intl.DateTimeFormat("en-US", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(instant);
   const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
   return { year: value("year"), month: value("month"), day: value("day"), hour: value("hour"), minute: value("minute"), second: value("second") };
+};
+
+export const isWithinCustomerVisitHours = (instant: Date, timeZone = VISIT_TIME_ZONE): boolean => {
+  const local = zoneParts(instant, timeZone);
+  const minutes = local.hour * 60 + local.minute + local.second / 60 + instant.getUTCMilliseconds() / 60_000;
+  return minutes >= CUSTOMER_VISIT_HOURS.start && minutes <= CUSTOMER_VISIT_HOURS.end;
 };
 
 /** 해당 시각 UTC가 time zone에서 몇 분 앞서는지(분). */
@@ -58,7 +65,7 @@ export type VisitPreference = { readonly visitDate?: string | null; readonly vis
 export type VisitResolution =
   | { readonly status: "none" }
   | { readonly status: "ok"; readonly desiredTime: string; readonly label: string }
-  | { readonly status: "past" | "too_far" | "invalid" };
+  | { readonly status: "past" | "too_far" | "invalid" | "outside_hours" };
 
 const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
@@ -86,11 +93,15 @@ export const resolveVisitPreference = (preference: VisitPreference, now: Date, l
   if (!instant) return { status: "invalid" };
   if (instant.getTime() <= now.getTime()) return { status: "past" };
   if (instant.getTime() > now.getTime() + MAX_VISIT_LEAD_DAYS * 86_400_000) return { status: "too_far" };
+  if (timeMatch && !isWithinCustomerVisitHours(instant)) return { status: "outside_hours" };
   return { status: "ok", desiredTime: instant.toISOString(), label: formatVisitLabel(instant, locale, timeMatch ? undefined : window, Boolean(timeMatch)) };
 };
 
 const VISIT_QUESTION_ID = "visit_time";
-const revisitPrompt = (locale: IntakeLocale, reason: "past" | "too_far" | "invalid"): string => {
+const revisitPrompt = (locale: IntakeLocale, reason: "past" | "too_far" | "invalid" | "outside_hours"): string => {
+  if (reason === "outside_hours") return locale === "es"
+    ? "Las visitas se pueden reservar entre las 7 AM y las 8 PM. ¿Qué día y a qué hora le gustaría la visita?"
+    : "Visits can be booked between 7 AM and 8 PM. What day and time would you like the visit?";
   if (locale === "es") return reason === "past" ? "Ese horario ya pasó. ¿Qué día y a qué hora (mañana, tarde o una hora exacta) le gustaría la visita?" : "¿Qué día y a qué hora (mañana, tarde o una hora exacta) le gustaría la visita? Podemos programar hasta 6 meses adelante.";
   return reason === "past" ? "That time has already passed. What day and time (morning, afternoon, or an exact time) would you like the visit?" : "What day and time (morning, afternoon, or an exact time) would you like the visit? We can schedule up to 6 months ahead.";
 };
@@ -115,6 +126,7 @@ export const applyVisitPreference = (assessment: ModelAssessment, now: Date, loc
     if (Number.isNaN(legacy.getTime())) resolution = { status: "invalid" };
     else if (legacy.getTime() <= now.getTime()) resolution = { status: "past" };
     else if (legacy.getTime() > now.getTime() + MAX_VISIT_LEAD_DAYS * 86_400_000) resolution = { status: "too_far" };
+    else if (!isWithinCustomerVisitHours(legacy)) resolution = { status: "outside_hours" };
     else resolution = { status: "ok", desiredTime: legacy.toISOString(), label: formatVisitLabel(legacy, locale, undefined, true) };
   }
   if (resolution.status === "none") return { ...assessment, details: withoutVisitFields(details) };

@@ -15,6 +15,7 @@ export function errorMessage(error: unknown, locale: 'en' | 'es'): string {
   }
   const code = error.code.toLowerCase();
   if (error.status === 401) return t('Your session has expired. Please sign in again.', 'Tu sesión ha caducado. Vuelve a iniciar sesión.');
+  if (code.includes('schedule_outside_hours')) return t('Visits can be booked between 7 AM and 8 PM. Please choose a time within those hours.', 'Las visitas se pueden reservar entre las 7 AM y las 8 PM. Elige un horario dentro de esas horas.');
   if (code.includes('schedule_in_past')) return t('That visit time has already passed. Pick a future date and time.', 'Esa hora de visita ya pasó. Elige una fecha y hora futuras.');
   if (code.includes('schedule_too_far')) return t('That visit time is too far ahead. Pick a date within the next year.', 'Esa hora de visita es demasiado lejana. Elige una fecha dentro del próximo año.');
   if (code.includes('schedule_time_zone_invalid')) return t('We could not read the time zone for this visit. Please try again.', 'No pudimos leer la zona horaria de esta visita. Inténtalo de nuevo.');
