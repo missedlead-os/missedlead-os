@@ -34,6 +34,33 @@ describe("schedule API validation", () => {
     expect((await put("customer", { startsAt: "2028-01-01T10:00:00.000Z", timeZone: "America/New_York", status: "proposed" }).expect(422)).body).toEqual({ error: "schedule_too_far" });
   });
 
+  it.each([
+    ["03:00", false], ["06:59", false], ["07:00", true], ["18:30", true],
+    ["20:00", true], ["20:30", false],
+  ])("checks customer local start %s across DST", async (time, allowed) => {
+    const { put } = await prepared();
+    for (const [day, offset] of [["2026-09-12", "-04:00"], ["2026-12-12", "-05:00"]]) {
+      const response = await put("customer", { startsAt: `${day}T${time}:00${offset}`, timeZone: "America/New_York", status: "proposed" }).expect(allowed ? 200 : 422);
+      if (!allowed) expect(response.body).toEqual({ error: "schedule_outside_hours" });
+    }
+  });
+
+  it("evaluates the request time zone, independently of the timestamp offset", async () => {
+    const { put } = await prepared();
+    const startsAt = "2026-12-12T12:00:00Z";
+    await put("customer", { startsAt, timeZone: "America/New_York", status: "proposed" }).expect(200);
+    expect((await put("customer", { startsAt, timeZone: "America/Los_Angeles", status: "proposed" }).expect(422)).body).toEqual({ error: "schedule_outside_hours" });
+  });
+
+  it("allows providers and operators to propose or confirm special hours", async () => {
+    const { put } = await prepared();
+    for (const actor of ["provider", "operator"] as const) {
+      for (const status of ["proposed", "confirmed"]) {
+        await put(actor, { startsAt: "2026-09-12T06:00:00-04:00", timeZone: "America/New_York", status }).expect(200);
+      }
+    }
+  });
+
   it("rejects malformed input before touching the repository", async () => {
     const { put } = await prepared();
     await put("customer", {}).expect(400);

@@ -4,6 +4,7 @@
 export type ErrorLocale = "en" | "es";
 
 const MESSAGES: Record<string, { en: string; es: string }> = {
+  schedule_outside_hours: { en: "Visits can be booked between 7 AM and 8 PM. Please choose a time within those hours.", es: "Las visitas se pueden reservar entre las 7 AM y las 8 PM. Elija un horario dentro de esas horas." },
   schedule_in_past: { en: "That visit time has already passed. Please pick a future date and time.", es: "Esa hora de visita ya pasó. Elija una fecha y hora futuras." },
   schedule_too_far: { en: "That visit time is too far ahead. Please pick a date within the next year.", es: "Esa hora de visita es demasiado lejana. Elija una fecha dentro del próximo año." },
   schedule_time_zone_invalid: { en: "We couldn’t read the time zone for that visit. Please try again.", es: "No pudimos leer la zona horaria de esa visita. Inténtelo de nuevo." },

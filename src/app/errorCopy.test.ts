@@ -6,6 +6,8 @@ import { friendlyError, isRawErrorCode, setErrorLocale } from "./errorCopy";
 
 describe("friendlyError", () => {
   it("maps schedule and service-area codes to en/es sentences", () => {
+    expect(friendlyError("schedule_outside_hours", "en")).toContain("between 7 AM and 8 PM");
+    expect(friendlyError("schedule_outside_hours", "es")).toContain("entre las 7 AM y las 8 PM");
     expect(friendlyError("schedule_in_past", "en")).toMatch(/already passed/);
     expect(friendlyError("schedule_in_past", "es")).toMatch(/ya pasó/);
     expect(friendlyError("schedule_confirmation_forbidden", "en")).toMatch(/pro confirms/);
@@ -14,7 +16,7 @@ describe("friendlyError", () => {
   });
 
   it("never returns a raw snake_case code", () => {
-    for (const code of ["service_zip_unavailable", "schedule_too_far", "totally_new_server_code", "forbidden"]) {
+    for (const code of ["service_zip_unavailable", "schedule_outside_hours", "schedule_too_far", "totally_new_server_code", "forbidden"]) {
       for (const locale of ["en", "es"] as const) {
         const message = friendlyError(code, locale);
         expect(isRawErrorCode(message)).toBe(false);
