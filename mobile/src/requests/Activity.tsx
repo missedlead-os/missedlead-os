@@ -55,7 +55,7 @@ export function Activity({ activity, locale, busy = false, onRefresh, onOpenMedi
     {!!error && <Text style={styles.danger}>{error}</Text>}
     <Action label={t('Refresh history and photos', 'Actualizar historial y fotos')} disabled={busy} onPress={onRefresh ?? (() => setRefresh((value) => value + 1))} />
     {displayedActivity?.acknowledgment && <Text style={styles.body}>{t('Completion confirmed', 'Finalización confirmada')}: {new Date(displayedActivity.acknowledgment.acceptedAt).toLocaleString(locale)}</Text>}
-    {displayedActivity?.schedules.map((v) => <View key={v.id} style={styles.separator}><Text style={styles.body}>{v.status === 'confirmed' ? t('Confirmed visit', 'Visita confirmada') : t('Proposed visit', 'Visita propuesta')}: {new Date(v.startsAt).toLocaleString(locale)}</Text><Text style={styles.muted}>{new Date(v.changedAt).toLocaleString(locale)}</Text></View>)}
+    {displayedActivity?.schedules.map((v) => <View key={v.id} style={styles.separator}><Text style={styles.body}>{v.status === 'cancelled' ? t('Cancelled visit', 'Visita cancelada') : v.status === 'confirmed' ? t('Confirmed visit', 'Visita confirmada') : t('Proposed visit', 'Visita propuesta')}: {new Date(v.startsAt).toLocaleString(locale)}</Text><Text style={styles.muted}>{new Date(v.changedAt).toLocaleString(locale)}</Text></View>)}
     {groups.map(([kind, label]) => {
       const items = displayedActivity?.evidence.filter((item) => item.kind === kind) ?? [];
       if (items.length === 0) return null;
