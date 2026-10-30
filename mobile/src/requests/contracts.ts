@@ -63,7 +63,7 @@ export function filterQuotes(quotes: readonly Quote[], language: string, before:
   return quotes.filter((q) => (!language || q.ranking.languages?.some((value) => value.toLowerCase() === language || (language === 'en' && value.toLowerCase() === 'english') || (language === 'es' && ['spanish', 'español'].includes(value.toLowerCase())))) && Date.parse(q.ranking.earliestStartAt) <= deadline);
 }
 export function requestStatus(status: string, locale: Locale): string {
-  const labels: Readonly<Record<string, readonly [string, string]>> = { intake: ['Finding professionals', 'Buscando profesionales'], matched: ['Waiting for quotes', 'Esperando presupuestos'], quoted: ['Quotes available', 'Presupuestos disponibles'], funded: ['Deposit paid', 'Depósito pagado'], in_progress: ['Work in progress', 'Trabajo en curso'], completed: ['Work completed', 'Trabajo terminado'], settled: ['Payment complete', 'Pago completado'] };
+  const labels: Readonly<Record<string, readonly [string, string]>> = { cancelled: ['Cancelled', 'Cancelada'], intake: ['Finding professionals', 'Buscando profesionales'], matched: ['Waiting for quotes', 'Esperando presupuestos'], quoted: ['Quotes available', 'Presupuestos disponibles'], funded: ['Deposit paid', 'Depósito pagado'], in_progress: ['Work in progress', 'Trabajo en curso'], completed: ['Work completed', 'Trabajo terminado'], settled: ['Payment complete', 'Pago completado'] };
   const label = labels[status];
   return label ? label[locale === 'es' ? 1 : 0] : locale === 'es' ? 'Solicitud en revisión' : 'Request under review';
 }

@@ -9,6 +9,7 @@ import { canAcknowledgeCompletion, hasRequiredCompletionEvidence, money } from '
 import { VisitPicker } from './VisitPicker';
 
 export function RequestActions({ data, activity, requestId, locale, busy, act, onActivityChanged }: { readonly data: Dashboard; readonly activity?: ActivityData; readonly requestId: string; readonly locale: Locale; readonly busy: boolean; readonly act: (path: string, body: unknown, method?: 'POST' | 'PUT') => Promise<boolean>; readonly onActivityChanged: () => Promise<void> }) {
+  const [cancelConfirmed, setCancelConfirmed] = useState(false);
   const [message, setMessage] = useState('');
   const [reason, setReason] = useState('');
   const [review, setReview] = useState('');
@@ -21,7 +22,9 @@ export function RequestActions({ data, activity, requestId, locale, busy, act, o
   const changes = data.changes.filter((v) => v.requestId === requestId);
   const completionEvidenceReady = activity ? hasRequiredCompletionEvidence(activity) : false;
   const completionCanBeAcknowledged = activity ? canAcknowledgeCompletion(activity) : false;
+  const status = data.requests.find(v => v.id === requestId)?.status;
   return <>
+    {!['completed', 'settled', 'cancelled'].includes(status ?? '') && <View style={styles.section}><Check checked={cancelConfirmed} onPress={() => setCancelConfirmed(value => !value)} label={t('Cancel this request and its visit?', '¿Cancelar esta solicitud y su visita?')} /><Action label={t('Cancel request', 'Cancelar solicitud')} disabled={busy || !cancelConfirmed} onPress={() => { void act(`${base}/cancel`, {}).then(saved => { if (saved) setCancelConfirmed(false); }); }} /></View>}
     <View style={styles.section}>
       <Text style={styles.heading}>{t('Conversation', 'Conversación')}</Text>
       <Text style={styles.muted}>{t('Phone numbers and email addresses are hidden automatically.', 'Los teléfonos y correos se ocultan automáticamente.')}</Text>
@@ -31,8 +34,8 @@ export function RequestActions({ data, activity, requestId, locale, busy, act, o
     </View>
     <View style={styles.section}>
       <Text style={styles.heading}>{t('Visit', 'Visita')}</Text>
-      {schedule && <Text style={styles.body}>{new Date(schedule.startsAt).toLocaleString(locale)} · {schedule.timeZone} · {schedule.status === 'confirmed' ? t('Confirmed', 'Confirmada') : t('Proposed', 'Propuesta')}</Text>}
-      <VisitPicker locale={locale} busy={busy} onPropose={(date) => { void act(`${base}/schedule`, { startsAt: date.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, status: 'proposed' }, 'PUT'); }} />
+      {schedule && <Text style={styles.body}>{new Date(schedule.startsAt).toLocaleString(locale)} · {schedule.timeZone} · {schedule.status === 'cancelled' ? t('Cancelled', 'Cancelada') : schedule.status === 'confirmed' ? t('Confirmed', 'Confirmada') : t('Proposed', 'Propuesta')}</Text>}
+      {status !== 'cancelled' && <VisitPicker locale={locale} busy={busy} onPropose={(date) => { void act(`${base}/schedule`, { startsAt: date.toISOString(), timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, status: 'proposed' }, 'PUT'); }} />}
       {schedule?.status === 'proposed' ? <Text style={styles.muted}>{t('Waiting for your pro to confirm this time.', 'Esperando que su técnico confirme este horario.')}</Text> : null}
     </View>
     {changes.map((change) => <View key={change.id} style={styles.warning}>

@@ -19,6 +19,8 @@ test('availability filter excludes later quotes and invalid dates do not expose 
   assert.equal(filterQuotes(quotes, '', 'invalid').length, 0);
 });
 test('request status displays localized customer language', () => {
+  assert.equal(requestStatus('cancelled', 'en'), 'Cancelled');
+  assert.equal(requestStatus('cancelled', 'es'), 'Cancelada');
   assert.equal(requestStatus('funded', 'es'), 'Depósito pagado');
   assert.equal(requestStatus('unknown', 'es'), 'Solicitud en revisión');
 });
