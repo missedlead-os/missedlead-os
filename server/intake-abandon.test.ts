@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createApp, InMemoryRepository } from './app.js';
 import { localFetch } from './testing/local-http.js';
-import { assessmentSchema } from '../mobile/src/chat/protocol.js';
+import { modelAssessmentSchema } from './intake/types.js';
 
 describe('intake abandonment before AI (no sockets)', () => {
   it.each(['en', 'es'] as const)('returns a non-confirmable %s reply and creates nothing', async locale => {
@@ -12,7 +12,12 @@ describe('intake abandonment before AI (no sockets)', () => {
     const response = await localFetch(app,'http://local/api/intake/analyze',{method:'POST',headers:{Authorization:'Bearer owner'},body:form});
     expect(response.status).toBe(200);
     const result = await response.json();
-    expect(assessmentSchema.safeParse(result).success).toBe(true);
+    // Check the client-facing assessment fields without loading the Expo project.
+    expect(modelAssessmentSchema.safeParse(result).success).toBe(true);
+    expect(result.locale).toBe(locale);
+    expect(result.assessmentToken).toEqual(expect.any(String));
+    expect(result.assessmentToken.length).toBeGreaterThan(0);
+    expect(result.references).toEqual([]);
     expect(result).toMatchObject({readyToConfirm:false,issueCandidates:[],questions:[]});
     expect(result.reply).toContain(locale === 'es' ? 'No se ha reservado nada' : 'Nothing was booked');
     expect(analyze).not.toHaveBeenCalled();
