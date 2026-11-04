@@ -1,6 +1,7 @@
 /**
  * 요청 액션 모음: 메시지 전송, 취소/분쟁 사유, 완료 후 평점·리뷰.
  */
+import { z } from 'zod';
 import { useState } from 'react';
 import { Text, TextInput, View } from 'react-native';
 import { Action, Check, styles } from '../chat/ui';
@@ -8,7 +9,8 @@ import type { ActivityData, Dashboard, Locale } from './contracts';
 import { canAcknowledgeCompletion, hasRequiredCompletionEvidence, money } from './contracts';
 import { VisitPicker } from './VisitPicker';
 
-export function RequestActions({ data, activity, requestId, locale, busy, act, onActivityChanged }: { readonly data: Dashboard; readonly activity?: ActivityData; readonly requestId: string; readonly locale: Locale; readonly busy: boolean; readonly act: (path: string, body: unknown, method?: 'POST' | 'PUT') => Promise<boolean>; readonly onActivityChanged: () => Promise<void> }) {
+export function RequestActions({ data, activity, requestId, locale, busy, act, onActivityChanged }: { readonly data: Dashboard; readonly activity?: ActivityData; readonly requestId: string; readonly locale: Locale; readonly busy: boolean; readonly act: (path: string, body: unknown, method?: 'POST' | 'PUT', onResult?: (result: unknown) => void) => Promise<boolean>; readonly onActivityChanged: () => Promise<void> }) {
+  const [cancelSuggested, setCancelSuggested] = useState(false);
   const [cancelConfirmed, setCancelConfirmed] = useState(false);
   const [message, setMessage] = useState('');
   const [reason, setReason] = useState('');
@@ -24,13 +26,14 @@ export function RequestActions({ data, activity, requestId, locale, busy, act, o
   const completionCanBeAcknowledged = activity ? canAcknowledgeCompletion(activity) : false;
   const status = data.requests.find(v => v.id === requestId)?.status;
   return <>
-    {!['completed', 'settled', 'cancelled'].includes(status ?? '') && <View style={styles.section}><Check checked={cancelConfirmed} onPress={() => setCancelConfirmed(value => !value)} label={t('Cancel this request and its visit?', '¿Cancelar esta solicitud y su visita?')} /><Action label={t('Cancel request', 'Cancelar solicitud')} disabled={busy || !cancelConfirmed} onPress={() => { void act(`${base}/cancel`, {}).then(saved => { if (saved) setCancelConfirmed(false); }); }} /></View>}
+    {!['completed', 'settled', 'cancelled'].includes(status ?? '') && <View style={styles.section}><Check checked={cancelConfirmed} onPress={() => setCancelConfirmed(value => !value)} label={t('Cancel this request and its visit?', '¿Cancelar esta solicitud y su visita?')} /><Action label={t('Cancel request', 'Cancelar solicitud')} disabled={busy || !cancelConfirmed} onPress={() => { void act(`${base}/cancel`, {}).then(saved => { if (saved) { setCancelConfirmed(false); setCancelSuggested(false); } }); }} /></View>}
     <View style={styles.section}>
       <Text style={styles.heading}>{t('Conversation', 'Conversación')}</Text>
       <Text style={styles.muted}>{t('Phone numbers and email addresses are hidden automatically.', 'Los teléfonos y correos se ocultan automáticamente.')}</Text>
       {data.messages.filter((v) => v.requestId === requestId).map((v) => <View key={v.id} style={styles.bubble}><Text style={styles.body}>{v.text}</Text><Text style={styles.muted}>{new Date(v.createdAt).toLocaleString(locale)}</Text></View>)}
       <TextInput accessibilityLabel={t('Message', 'Mensaje')} multiline maxLength={2000} style={styles.input} value={message} onChangeText={setMessage} />
-      <Action label={t('Send', 'Enviar')} disabled={busy || !message.trim()} onPress={() => { void act(`${base}/messages`, { text: message.trim() }).then((saved) => { if (saved) setMessage(''); }); }} />
+      <Action label={t('Send', 'Enviar')} disabled={busy || !message.trim()} onPress={() => { void act(`${base}/messages`, { text: message.trim() }, 'POST', result => { const parsed = z.object({ suggestedAction: z.object({ type: z.literal('cancel_request'), requestId: z.literal(requestId) }).optional() }).safeParse(result); setCancelSuggested(parsed.success && !!parsed.data.suggestedAction); }).then((saved) => { if (saved) setMessage(''); }); }} />
+      {cancelSuggested && !['completed', 'settled', 'cancelled'].includes(status ?? '') && <View style={styles.warning}><Text style={styles.body}>{t('Do you want to cancel this request and visit?', '¿Quieres cancelar esta solicitud y su visita?')}</Text><Action label={t('Cancel request', 'Cancelar solicitud')} disabled={busy} onPress={() => { void act(`${base}/cancel`, {}).then(saved => { if (saved) { setCancelSuggested(false); setCancelConfirmed(false); } }); }} /><Action label={t('Keep request', 'Conservar solicitud')} disabled={busy} onPress={() => setCancelSuggested(false)} /></View>}
     </View>
     <View style={styles.section}>
       <Text style={styles.heading}>{t('Visit', 'Visita')}</Text>

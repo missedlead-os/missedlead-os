@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { createApp, InMemoryRepository, emptyState } from './app.js';
 import { localFetch } from './testing/local-http.js';
-function setup(status = 'matched', visitStatus: 'proposed' | 'confirmed' = 'proposed') {
+function setup(status = 'matched', visitStatus: 'proposed' | 'confirmed' = 'proposed', completedJob = false) {
   const state = emptyState();
   state.requests.r = { id: 'r', customerId: 'owner', customerName: 'Owner', description: 'Sink leak', address: 'Charlotte', status, safetyStatus: 'cleared', providerIds: ['pro'], expandedSearch: true, createdAt: '2026-10-30T12:00:00Z' };
   state.schedules.r = { requestId: 'r', startsAt: '2026-11-01T14:00:00Z', timeZone: 'America/New_York', status: visitStatus };
   state.providerEligibility.pro = { status:'approved', organizationName:'Pro', serviceAreas:['Charlotte'], serviceCategories:['general'], licenseVerified:true, insuranceVerified:true, licenseExpiresAt:'2030-01-01', insuranceExpiresAt:'2030-01-01' };
+  if (completedJob) state.jobs.r = {requestId:'r',quoteId:'q',providerId:'pro',depositCents:0,completedAt:'2026-10-30T11:00:00Z',settlementState:'none',authorizationVersion:0};
   const repository = new InMemoryRepository(state);
   const app = createApp({ repository, auth: { async authenticate(token) { return { id: token, role: token === 'pro' ? 'provider' : 'customer' }; } }, paymentsMode:'disabled', now: () => new Date('2026-10-30T12:00:00Z') });
   return async (method: string, path: string, body?: unknown, token = 'owner') => {
@@ -38,5 +39,40 @@ describe('customer request cancellation (no sockets)', () => {
     expect((await call('POST','/api/requests/r/cancel',{reason:'x'.repeat(501)})).status).toBe(400);
     expect((await call('POST','/api/requests/missing/cancel',{})).status).toBe(403);
     expect((await call('POST','/api/requests/r/cancel',{reason:12})).status).toBe(400);
+  });
+});
+
+describe('chat cancellation suggestions (no sockets)', () => {
+  it('stores customer intent, suggests confirmation and leaves the request active', async () => {
+    const call = setup();
+    const result = await call('POST', '/api/requests/r/messages', {text:'취소할께요'});
+    expect(result.status).toBe(201);
+    expect(result.data).toMatchObject({text:'취소할께요', suggestedAction:{type:'cancel_request', requestId:'r'}});
+    const dashboard = await call('GET','/api/dashboard');
+    expect(dashboard.data.requests[0].status).toBe('matched');
+    expect(dashboard.data.messages).toHaveLength(1);
+    expect(dashboard.data.messages[0].suggestedAction).toBeUndefined();
+  });
+  it.each(['cancelled','completed','settled'])('does not suggest for %s', async status => {
+    const result = await setup(status)('POST','/api/requests/r/messages',{text:'cancel appt'});
+    expect(result.status).toBe(201);
+    expect(result.data.suggestedAction).toBeUndefined();
+  });
+  it('does not suggest for provider messages or negated customer intent', async () => {
+    const call = setup();
+    for (const [token,text] of [['pro','cancel my appointment'],['owner','no, mejor no la cancele'],['owner','cancel culture']]) {
+      const result = await call('POST','/api/requests/r/messages',{text},token);
+      expect(result.status).toBe(201);
+      expect(result.data.suggestedAction).toBeUndefined();
+    }
+    expect((await call('GET','/api/dashboard')).data.requests[0].status).toBe('matched');
+  });
+  it('does not suggest when a job has completed before the status catches up', async () => {
+    const result = await setup('matched','proposed',true)('POST','/api/requests/r/messages',{text:'cancel appt'});
+    expect(result.status).toBe(201);
+    expect(result.data.suggestedAction).toBeUndefined();
+  });
+  it('still rejects non-owners', async () => {
+    expect((await setup()('POST','/api/requests/r/messages',{text:'cancel appt'},'other')).status).toBe(403);
   });
 });

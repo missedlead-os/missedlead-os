@@ -1,3 +1,4 @@
+import { hasIntakeAbandonIntent } from '../cancelIntent.js';
 /**
  * AI 인테이크 라우트: POST /api/intake/analyze(멀티모달 분석), 번역, 미디어 업로드·조회,
  * 가안 확정(confirm). 안전 게이트·사용량 제한·토큰 서명을 조합한다.
@@ -16,7 +17,7 @@ import { enforceSafetyFloor } from "./safety.js";
 import { enforceServiceScope } from "./scope.js";
 import { applyVisitPreference, VISIT_TIME_ZONE } from "./visitTime.js";
 import { AssessmentTokenSigner, InvalidAssessmentTokenError } from "./token.js";
-import { localeSchema, translationRecordSchema, type IntakeMedia, type SignedAssessment } from "./types.js";
+import { localeSchema, translationRecordSchema, type IntakeMedia, type ModelAssessment, type SignedAssessment } from "./types.js";
 import type { IntakeUsageBudget } from "./usage.js";
 
 const MAX_FILE_BYTES = 25_000_000;
@@ -154,6 +155,21 @@ export const registerIntakeRoutes = (app: Express, options: RouteOptions): void 
     if (emergency) {
       if (emergency.signed && options.onSafety) void options.onSafety(emergency.signed).catch(() => console.warn("Emergency report storage unavailable"));
       return response.json(emergency.response);
+    }
+    if (!signer) return response.status(503).json({ error: "intake_ai_unavailable" });
+    if (hasIntakeAbandonIntent(payload.history.filter(message => message.role === "user").at(-1)?.content ?? "")) {
+      const assessment: ModelAssessment = {
+        reply: payload.locale === "es" ? "No se ha reservado nada. Puedes empezar de nuevo cuando quieras." : "Nothing was booked. You can start again anytime.",
+        category: "handyman", summary: "Intake abandoned",
+        issueCandidates: [], questions: [], materialsHint: [], details: {},
+        safety: { level: "normal", hazards: [], guidance: "" }, readyToConfirm: false,
+      };
+      const assessmentToken = signer.sign({ version: 1, assessmentId: randomUUID(), actorId: actor(response).id,
+        expiresAt: new Date(options.now().getTime() + 30 * 60_000).toISOString(), locale: payload.locale, assessment,
+        skippedQuestionIds: [], skippedQuestions: [], uncertaintyAcknowledged: false, attachmentTypes: [], attachmentNames: [], attachmentDigests: [],
+        askedQuestions: [], history: [], translations: [],
+      });
+      return response.json({ ...assessment, locale: payload.locale, assessmentToken, references: [] });
     }
     if (!provider || !signer) return response.status(503).json({ error: "intake_ai_unavailable" });
     const translations: z.infer<typeof translationRecordSchema>[] = [];
