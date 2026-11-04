@@ -51,9 +51,9 @@ export function RequestsScreen({ accessToken, locale, onBack }: { readonly acces
       await Linking.openURL(url);
     } catch (error) { setNotice(errorMessage(error, locale)); }
   };
-  const act = async (path: string, body: unknown, method: 'POST' | 'PUT' = 'POST') => {
+  const act = async (path: string, body: unknown, method: 'POST' | 'PUT' = 'POST', onResult?: (result: unknown) => void) => {
     setBusy(true); setNotice('');
-    try { await (method === 'PUT' ? put(path, accessToken, z.unknown(), body) : post(path, accessToken, z.unknown(), body)); await refresh(); setNotice(t('Saved.', 'Guardado.')); return true; }
+    try { const result = await (method === 'PUT' ? put(path, accessToken, z.unknown(), body) : post(path, accessToken, z.unknown(), body)); onResult?.(result); await refresh(); setNotice(t('Saved.', 'Guardado.')); return true; }
     catch (error) { setNotice(errorMessage(error, locale)); return false; }
     finally { setBusy(false); }
   };

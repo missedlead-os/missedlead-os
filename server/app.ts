@@ -1,3 +1,4 @@
+import { hasCancelIntent } from './cancelIntent.js';
 /**
  * Express 앱 조립부. 인증 미들웨어, 역할 인가, /api/capabilities, 레거시 repository 라우트와
  * features/*(Supabase RPC) 라우트를 한 앱에 마운트한다. maskMessage 등 공유 유틸 포함.
@@ -280,7 +281,27 @@ export function createApp(options: AppOptions = {}) {
   app.post("/api/privacy/consent", async (req,res)=>{const input=body(z.object({version:z.string().min(1),accepted:z.literal(true)}),req,res);if(!input)return;await repository.execute("privacy_consent",{version:input.version}, {actor:actor(res),accessToken:req.header("Authorization")?.slice(7)??"",now:now().toISOString()},s=>{s.privacy[actor(res).id]={actorId:actor(res).id,consentVersion:input.version,consentedAt:now().toISOString()};return{status:201,data:s.privacy[actor(res).id]}}).then(v=>res.status(v.status).json(v.data))});
   app.post("/api/privacy/deletion", async (req,res)=>{await repository.execute("privacy_delete",{}, {actor:actor(res),accessToken:req.header("Authorization")?.slice(7)??"",now:now().toISOString()},s=>{const p=s.privacy[actor(res).id];if(!p)return{status:409,data:{error:"privacy_consent_required"}};p.deletionRequestedAt=now().toISOString();return{status:202,data:p}}).then(v=>res.status(v.status).json(v.data))});
   app.post("/api/requests/:requestId/details",requireRole(["customer"]),async(req,res)=>{const input=body(requestDetails,req,res);if(!input)return;await repository.execute("request_details",{...input,priceDisclosure:input.priceDisclosure??{source:"legacy_acceptance",sampleCount:0,updatedAt:now().toISOString(),confidence:0},request_id:String(req.params.requestId)}, {actor:actor(res),accessToken:req.header("Authorization")?.slice(7)??"",now:now().toISOString()},s=>{const r=s.requests[String(req.params.requestId)];if(!r||r.customerId!==actor(res).id)return{status:403,data:{error:"forbidden"}};if(r.workScopeSnapshot)return{status:409,data:{error:"work_scope_immutable"}};r.workScopeSnapshot=typeof input.workScope==="string"?{symptom:input.workScope,location:r.address,dimensions:"unspecified",access:"unspecified",desiredTime:now().toISOString(),photos:[],exclusions:[]}:input.workScope;r.triageSnapshot=input.triage;r.priceDisclosure=input.priceDisclosure??{source:"legacy_acceptance",sampleCount:0,updatedAt:now().toISOString(),confidence:0};addAudit(s,actor(res),"request.details_disclosed",r.id,input);return{status:200,data:{...input,priceDisclosure:r.priceDisclosure}}}).then(v=>res.status(v.status).json(v.data))});
-  app.post("/api/requests/:requestId/messages",async(req,res)=>{const input=body(z.object({text:z.string().trim().min(1).max(2000)}),req,res);if(!input)return;const masked=maskMessage(input.text);await repository.execute("message_create",{text:masked,request_id:String(req.params.requestId)}, {actor:actor(res),accessToken:req.header("Authorization")?.slice(7)??"",now:now().toISOString()},s=>{const id=String(req.params.requestId);if(!owns(s,id,actor(res)))return{status:403,data:{error:"forbidden"}};const value={id:`msg_${++s.sequence}`,requestId:id,senderId:actor(res).id,text:masked,createdAt:now().toISOString()};s.messages.push(value);return{status:201,data:value}}).then(v=>res.status(v.status).json(v.data))});
+  app.post("/api/requests/:requestId/messages", async (req, res) => {
+    const input = body(z.object({ text: z.string().trim().min(1).max(2000) }), req, res);
+    if (!input) return;
+    const id = String(req.params.requestId), who = actor(res), accessToken = req.header("Authorization")?.slice(7) ?? "";
+    const masked = maskMessage(input.text);
+    const result = await repository.execute("message_create", { text: masked, request_id: id }, { actor: who, accessToken, now: now().toISOString() }, s => {
+      if (!owns(s, id, who)) return { status: 403, data: { error: "forbidden" } };
+      const value = { id: `msg_${++s.sequence}`, requestId: id, senderId: who.id, text: masked, createdAt: now().toISOString() };
+      s.messages.push(value);
+      return { status: 201, data: value };
+    });
+    // Read through the repository so both in-memory and RPC-backed messages use the same contract.
+    if (result.status === 201 && who.role === "customer" && hasCancelIntent(input.text)) {
+      const dashboard = z.object({ requests: z.array(z.object({ id: z.string(), customerId: z.string(), status: z.string() })), jobs: z.array(z.object({ requestId: z.string(), completedAt: z.unknown().optional() })) }).parse(await repository.dashboard(who, accessToken));
+      const item = dashboard.requests.find(item => item.id === id && item.customerId === who.id);
+      if (item && !["cancelled", "completed", "settled"].includes(item.status) && !dashboard.jobs.some(job => job.requestId === id && job.completedAt)) {
+        return res.status(201).json({ ...result.data as object, suggestedAction: { type: "cancel_request", requestId: id } });
+      }
+    }
+    return res.status(result.status).json(result.data);
+  });
   app.post("/api/requests/:requestId/cancel", requireRole(["customer"]), async (req, res) => {
     const input = body(z.object({ reason: z.string().max(500).optional() }).default({}), req, res);
     if (!input) return;
